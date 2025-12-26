@@ -10,7 +10,7 @@
 
 Simplify Python virtual environment management with UV's blazing-fast performance and Conda's intuitive commands.
 
-[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Usage](#-usage) • [Auto-Activation](#-auto-activation)
+[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Usage](#-usage) • [Auto-Activation](#-auto-activation) • [Uninstall](#-uninstall)
 
 </div>
 
@@ -38,7 +38,9 @@ Simplify Python virtual environment management with UV's blazing-fast performanc
 
 ## 🚀 Installation
 
-### Quick Install (Recommended)
+### Interactive Installation (Recommended for First-Time Users)
+
+The installer features a **step-by-step wizard** that guides you through configuration:
 
 #### Linux / macOS
 
@@ -47,9 +49,21 @@ Simplify Python virtual environment management with UV's blazing-fast performanc
 git clone https://github.com/yourusername/uvm.git
 cd uvm
 
-# Run the installer
+# Run the interactive installer
 ./install.sh
 ```
+
+**The wizard will ask you:**
+1. **📁 Environment Directory** (default: `~/uv_envs`)
+   - Press Enter to use default
+   - Type `n` to enter custom path
+   - Or directly type your custom path
+
+2. **🔧 Install UV?** (if not already installed)
+   - Automatically installs UV on Linux/macOS
+
+3. **🐚 Enable auto-activation?** (default: Yes)
+   - Auto-activate when entering directories with `.venv` or `.uvmrc`
 
 #### Windows (Git Bash)
 
@@ -57,17 +71,26 @@ cd uvm
 # 1. First, install UV in PowerShell (one-time setup)
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# 2. Then, install uvm in Git Bash
+# 2. Then, run the interactive installer in Git Bash
 git clone https://github.com/yourusername/uvm.git
 cd uvm
 ./install.sh
 ```
 
-The installer will:
-1. ✅ Check if UV is installed (offer to install if missing on Linux/macOS)
-2. ✅ Copy `uvm` to `~/.local/bin/`
-3. ✅ Configure China mirrors for faster downloads
-4. ✅ Set up configuration directories
+### Non-Interactive Installation
+
+For automated setups or if you prefer defaults:
+
+```bash
+# Quick install with all defaults
+./install.sh -y
+
+# Install with custom environment directory
+./install.sh --envs-dir /mnt/data/python-envs
+
+# See all options
+./install.sh --help
+```
 
 ### Post-Installation
 
@@ -408,6 +431,29 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [astral-sh/uv](https://github.com/astral-sh/uv) - The blazing-fast Python package installer
 - [uv-custom](https://github.com/Wangnov/uv-custom) - Inspiration for China mirror configuration
 - [Conda](https://docs.conda.io/) - Command design inspiration
+
+---
+
+## 🗑️ Uninstall
+
+To remove UVM from your system:
+
+```bash
+cd /path/to/uvm
+./uninstall.sh
+```
+
+**What gets removed:**
+- UVM binary and library files
+- Configuration files
+- Shell integration
+
+**What stays:**
+- Your virtual environments (`~/uv_envs`)
+- UV itself
+- UV configuration (`~/.config/uv/uv.toml`)
+
+📖 **Detailed guide:** [UNINSTALL.md](UNINSTALL.md)
 
 ---
 

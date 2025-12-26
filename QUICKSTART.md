@@ -2,7 +2,7 @@
 
 Get started with uvm in 5 minutes!
 
-## 🚀 Installation (1 minute)
+## 🚀 Installation (2 minutes)
 
 ### Linux / macOS
 
@@ -11,9 +11,16 @@ Get started with uvm in 5 minutes!
 git clone https://github.com/yourusername/uvm.git
 cd uvm
 
-# Run the installer
+# Run the interactive installer
 ./install.sh
+```
 
+**Follow the wizard:**
+- **Step 1/3**: Environment directory (default: ~/uv_envs, press Enter or type custom path)
+- **Step 2/3**: Install UV if needed (auto-detected)
+- **Step 3/3**: Enable auto-activation? (default: Yes)
+
+```bash
 # Reload your shell
 source ~/.bashrc  # or ~/.zshrc
 ```
@@ -24,13 +31,20 @@ source ~/.bashrc  # or ~/.zshrc
 # 1. Install UV in PowerShell first
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# 2. Install uvm in Git Bash
+# 2. Run the interactive installer in Git Bash
 git clone https://github.com/yourusername/uvm.git
 cd uvm
 ./install.sh
 
 # 3. Reload your shell
 source ~/.bashrc
+```
+
+### Quick Install (Skip Wizard)
+
+```bash
+# Use defaults for everything
+./install.sh -y
 ```
 
 ## 🎯 Enable Auto-Activation (30 seconds)
@@ -109,6 +123,24 @@ uvm help          # Show help
 - Read the full [README.md](README.md) for detailed documentation
 - Check out [EXAMPLES.md](EXAMPLES.md) for real-world usage scenarios
 - Configure custom settings with `uvm config`
+
+## 🗑️ Uninstall
+
+If you need to remove UVM:
+
+```bash
+cd /path/to/uvm
+./uninstall.sh
+```
+
+**What happens:**
+- ✅ Removes UVM files
+- ✅ Cleans shell integration  
+- ✅ Keeps your environments safe
+
+📖 **Full guide:** [UNINSTALL.md](UNINSTALL.md)
+
+---
 
 ## ❓ Need Help?
 

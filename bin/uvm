@@ -9,6 +9,14 @@ LIB_DIR="$(cd "${SCRIPT_DIR}/../lib" && pwd)"
 
 # 设置默认环境变量
 export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
+
+# 读取配置文件中的环境目录设置
+if [ -f "${UVM_HOME}/config" ]; then
+    # 使用 source 读取配置
+    source "${UVM_HOME}/config"
+fi
+
+# 如果没有配置或环境变量未设置，使用默认值
 export UVM_ENVS_DIR="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
 
 # 加载核心模块

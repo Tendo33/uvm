@@ -185,11 +185,25 @@ configure_path() {
 
 # 初始化配置
 initialize_config() {
+    local envs_dir="${1:-${HOME}/uv_envs}"
+    
     print_info "Initializing uvm configuration..."
     
     # 创建配置目录
     mkdir -p "${HOME}/.config/uvm"
-    mkdir -p "${HOME}/uv_envs"
+    
+    # 创建环境目录
+    if [ ! -d "$envs_dir" ]; then
+        print_info "Creating environments directory: $envs_dir"
+        mkdir -p "$envs_dir"
+    else
+        print_success "Environments directory already exists: $envs_dir"
+    fi
+    
+    # 保存环境目录配置
+    local uvm_config="${HOME}/.config/uvm/config"
+    echo "UVM_ENVS_DIR=\"$envs_dir\"" > "$uvm_config"
+    print_success "Environment directory configured: $envs_dir"
     
     # 初始化环境列表
     if [ ! -f "${HOME}/.config/uvm/envs.json" ]; then
@@ -244,25 +258,47 @@ EOF
 
 # 显示安装后说明
 show_post_install() {
+    local enable_auto_activation="${1:-y}"
+    
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     print_success "uvm installed successfully!"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
+    # 读取配置的环境目录
+    local configured_envs_dir="${HOME}/uv_envs"
+    if [ -f "${HOME}/.config/uvm/config" ]; then
+        configured_envs_dir=$(grep "UVM_ENVS_DIR=" "${HOME}/.config/uvm/config" | cut -d'"' -f2)
+    fi
+    
     echo "📦 Installation Details:"
     echo "   Binary: ${HOME}/.local/bin/uvm"
     echo "   Library: ${HOME}/.local/lib/uvm"
     echo "   Config: ${HOME}/.config/uvm"
-    echo "   Environments: ${HOME}/uv_envs"
+    echo "   Environments: ${configured_envs_dir}"
     echo ""
-    echo "🚀 Quick Start:"
+    echo "🚀 Next Steps:"
+    echo ""
     echo "   1. Reload your shell configuration:"
     echo "      source ~/.bashrc  # or ~/.zshrc"
     echo ""
-    echo "   2. Enable auto-activation (optional but recommended):"
-    echo "      echo 'eval \"\$(uvm shell-hook)\"' >> ~/.bashrc"
-    echo "      source ~/.bashrc"
-    echo ""
+    
+    if [[ "$enable_auto_activation" =~ ^[Yy]$ ]]; then
+        echo "   2. Enable auto-activation (you chose YES):"
+        echo "      echo 'eval \"\$(uvm shell-hook)\"' >> ~/.bashrc"
+        echo "      source ~/.bashrc"
+        echo ""
+        echo "      After this, environments will auto-activate when you:"
+        echo "      • Enter a directory with .venv folder"
+        echo "      • Enter a directory with .uvmrc file"
+        echo ""
+    else
+        echo "   2. Auto-activation is disabled (you chose NO)"
+        echo "      You can enable it later by adding to ~/.bashrc:"
+        echo "      echo 'eval \"\$(uvm shell-hook)\"' >> ~/.bashrc"
+        echo ""
+    fi
+    
     echo "   3. Create your first environment:"
     echo "      uvm create myenv --python 3.11"
     echo ""
@@ -279,8 +315,164 @@ show_post_install() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
+# 交互式配置向导
+interactive_setup() {
+    echo "" >&2
+    echo "╔════════════════════════════════════════════════════════════╗" >&2
+    echo "║            UVM Installation Configuration Wizard           ║" >&2
+    echo "╚════════════════════════════════════════════════════════════╝" >&2
+    echo "" >&2
+    
+    # 步骤 1: 环境目录配置
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "📁 Step 1/3: Environment Directory" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "" >&2
+    echo "Virtual environments will be stored in:" >&2
+    echo "  ${HOME}/uv_envs" >&2
+    echo "" >&2
+    
+    local envs_dir="${HOME}/uv_envs"
+    read -p "Use this directory? (Y/n) or enter custom path: " choice
+    
+    # 如果用户输入了内容
+    if [ -n "$choice" ]; then
+        # 如果是 n/N，询问自定义路径
+        if [[ "$choice" =~ ^[Nn]$ ]]; then
+            read -p "Enter custom path: " custom_path
+            if [ -n "$custom_path" ]; then
+                # 展开 ~ 和环境变量
+                envs_dir=$(eval echo "$custom_path")
+            fi
+        # 如果不是 y/Y/n/N，当作路径处理
+        elif [[ ! "$choice" =~ ^[Yy]$ ]]; then
+            envs_dir=$(eval echo "$choice")
+        fi
+        # 如果是 y/Y，使用默认值（已设置）
+    fi
+    
+    print_success "Environment directory: $envs_dir" >&2
+    echo "" >&2
+    
+    # 步骤 2: UV 安装检查
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "🔧 Step 2/3: UV Installation Check" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "" >&2
+    
+    local install_uv_choice="n"
+    if ! check_uv 2>&1 >&2; then
+        echo "" >&2
+        local os=$(detect_os)
+        if [ "$os" = "windows" ]; then
+            print_warning "On Windows, UV must be installed manually in PowerShell:" >&2
+            print_info "  powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"" >&2
+            echo "" >&2
+            read -p "Have you already installed UV? (y/n) [n]: " uv_installed
+            if [[ ! "$uv_installed" =~ ^[Yy]$ ]]; then
+                print_error "Please install UV first, then run this installer again." >&2
+                exit 1
+            fi
+        else
+            read -p "Would you like to install UV now? (y/n) [y]: " install_uv_choice
+            install_uv_choice=${install_uv_choice:-y}
+        fi
+    else
+        # UV 已安装，显示版本信息到 stderr
+        local uv_version=$(uv --version 2>&1 | head -n 1)
+        print_success "UV is already installed: $uv_version" >&2
+        echo "" >&2
+    fi
+    echo "" >&2
+    
+    # 步骤 3: Shell 集成配置
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "🐚 Step 3/3: Auto-Activation" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "" >&2
+    echo "Auto-activation will automatically activate environments when you:" >&2
+    echo "  • Enter a directory with .venv folder" >&2
+    echo "  • Enter a directory with .uvmrc file" >&2
+    echo "" >&2
+    
+    local enable_auto_activation="y"
+    read -p "Enable auto-activation? (Y/n): " enable_auto_activation
+    enable_auto_activation=${enable_auto_activation:-y}
+    echo "" >&2
+    
+    # 返回配置结果
+    echo "$envs_dir"
+    echo "$install_uv_choice"
+    echo "$enable_auto_activation"
+}
+
 # 主安装流程
 main() {
+    # 解析命令行参数
+    local custom_envs_dir=""
+    local non_interactive=false
+    
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --envs-dir)
+                custom_envs_dir="$2"
+                non_interactive=true
+                shift 2
+                ;;
+            --non-interactive|-y)
+                non_interactive=true
+                shift
+                ;;
+            --help|-h)
+                cat <<EOF
+UVM Installer v1.0.0
+
+Usage: ./install.sh [OPTIONS]
+
+OPTIONS:
+    --envs-dir <path>    Custom directory for virtual environments
+                         (default: ~/uv_envs)
+    -y, --non-interactive
+                         Non-interactive mode (use defaults)
+    -h, --help           Show this help message
+
+MODES:
+    Interactive (default):
+        ./install.sh
+        
+        Launches a step-by-step wizard to configure:
+        - Environment directory location
+        - UV installation (if needed)
+        - Shell integration preferences
+    
+    Non-interactive:
+        ./install.sh -y
+        ./install.sh --envs-dir /custom/path
+
+EXAMPLES:
+    # Interactive installation (recommended for first-time users)
+    ./install.sh
+    
+    # Quick install with defaults
+    ./install.sh -y
+    
+    # Install with custom environment directory
+    ./install.sh --envs-dir /mnt/data/python-envs
+    
+    # Install with custom directory on external drive
+    ./install.sh --envs-dir /media/external/uvm-envs
+
+EOF
+                exit 0
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                print_info "Run './install.sh --help' for usage information"
+                exit 1
+                ;;
+        esac
+    done
+    
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
     echo "║                  UVM Installer v1.0.0                      ║"
@@ -293,20 +485,30 @@ main() {
     print_info "Detected OS: $os"
     echo ""
     
-    # 检查 UV
-    if ! check_uv; then
+    # 交互式配置或使用默认值
+    local install_uv_choice="n"
+    local enable_auto_activation="y"
+    
+    if [ "$non_interactive" = false ] && [ -z "$custom_envs_dir" ]; then
+        # 运行交互式向导
+        local config_result=$(interactive_setup)
+        custom_envs_dir=$(echo "$config_result" | sed -n '1p')
+        install_uv_choice=$(echo "$config_result" | sed -n '2p')
+        enable_auto_activation=$(echo "$config_result" | sed -n '3p')
+    else
+        print_info "Running in non-interactive mode..."
         echo ""
-        read -p "UV is not installed. Do you want to install it now? (y/N) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            install_uv || {
-                print_error "Failed to install UV"
-                exit 1
-            }
-        else
-            print_warning "Skipping UV installation. You can install it later from:"
-            print_warning "  https://github.com/astral-sh/uv"
-        fi
+    fi
+    
+    # 检查 UV（如果在交互模式中已经处理，则跳过）
+    if [ "$install_uv_choice" = "y" ] || [ "$install_uv_choice" = "Y" ]; then
+        install_uv || {
+            print_error "Failed to install UV"
+            exit 1
+        }
+    elif ! check_uv && [ "$non_interactive" = false ]; then
+        print_warning "Skipping UV installation. You can install it later from:"
+        print_warning "  https://github.com/astral-sh/uv"
     fi
     
     echo ""
@@ -325,10 +527,10 @@ main() {
     echo ""
     
     # 初始化配置
-    initialize_config
+    initialize_config "$custom_envs_dir"
     
     # 显示安装后说明
-    show_post_install
+    show_post_install "$enable_auto_activation"
 }
 
 # 执行安装

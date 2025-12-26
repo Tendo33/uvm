@@ -59,6 +59,94 @@ init_uvm_config() {
     return 0
 }
 
+# 检查是否是有效的 UV 虚拟环境
+is_valid_uv_env() {
+    local env_path="$1"
+    
+    # 检查是否存在激活脚本
+    if [ -f "${env_path}/bin/activate" ] || [ -f "${env_path}/Scripts/activate" ]; then
+        # 检查是否有 pyvenv.cfg（UV 和 venv 都会创建）
+        if [ -f "${env_path}/pyvenv.cfg" ]; then
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+# 获取环境的 Python 版本
+get_env_python_version() {
+    local env_path="$1"
+    local python_version="unknown"
+    
+    # 尝试从 Python 可执行文件获取版本
+    if [ -f "${env_path}/bin/python" ]; then
+        python_version=$("${env_path}/bin/python" --version 2>&1 | cut -d' ' -f2)
+    elif [ -f "${env_path}/Scripts/python.exe" ]; then
+        python_version=$("${env_path}/Scripts/python.exe" --version 2>&1 | cut -d' ' -f2)
+    fi
+    
+    echo "$python_version"
+}
+
+# 扫描并注册指定目录下的所有 UV 环境
+scan_and_register_envs() {
+    local scan_dir="$1"
+    local uvm_envs_file="${HOME}/.config/uvm/envs.json"
+    local registered_count=0
+    
+    # 确保配置已初始化
+    init_uvm_config
+    
+    # 检查目录是否存在
+    if [ ! -d "$scan_dir" ]; then
+        return 0
+    fi
+    
+    echo "Scanning for existing UV environments in: ${scan_dir}"
+    
+    # 读取已注册的环境名称
+    local existing_envs=""
+    if [ -f "${uvm_envs_file}" ]; then
+        existing_envs=$(grep -o "\"name\":\"[^\"]*\"" "${uvm_envs_file}" 2>/dev/null | cut -d'"' -f4 || true)
+    fi
+    
+    # 扫描目录
+    for env_dir in "${scan_dir}"/*; do
+        if [ -d "$env_dir" ]; then
+            local env_name=$(basename "$env_dir")
+            
+            # 跳过隐藏目录和特殊目录
+            if [[ "$env_name" == .* ]] || [[ "$env_name" == "desktop.ini" ]]; then
+                continue
+            fi
+            
+            # 检查是否已注册
+            if echo "$existing_envs" | grep -q "^${env_name}$"; then
+                continue
+            fi
+            
+            # 检查是否是有效的 UV 环境
+            if is_valid_uv_env "$env_dir"; then
+                local python_version=$(get_env_python_version "$env_dir")
+                
+                # 注册环境
+                add_env_record "$env_name" "$env_dir" "$python_version"
+                echo "  ✓ Registered: ${env_name} (Python ${python_version})"
+                registered_count=$((registered_count + 1))
+            fi
+        fi
+    done
+    
+    if [ $registered_count -eq 0 ]; then
+        echo "  No new environments found"
+    else
+        echo "✓ Registered ${registered_count} environment(s)"
+    fi
+    
+    return 0
+}
+
 # 添加环境记录到元数据
 add_env_record() {
     local env_name="$1"

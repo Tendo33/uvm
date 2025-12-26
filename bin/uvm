@@ -74,10 +74,30 @@ main() {
             init_uvm_config
             setup_uv_mirror
             echo ""
+            
+            # 扫描并注册已存在的环境
+            local uvm_envs_dir="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
+            if [ -d "$uvm_envs_dir" ]; then
+                echo ""
+                scan_and_register_envs "$uvm_envs_dir"
+            fi
+            
+            echo ""
             echo "✓ uvm initialized successfully"
             echo ""
             echo "To enable auto-activation, add this to your ~/.bashrc or ~/.zshrc:"
             echo "    eval \"\$(uvm shell-hook)\""
+            ;;
+        scan|register)
+            # 扫描并注册环境
+            local scan_dir="${1:-${UVM_ENVS_DIR:-${HOME}/uv_envs}}"
+            
+            if [ ! -d "$scan_dir" ]; then
+                echo "Error: Directory not found: $scan_dir"
+                return 1
+            fi
+            
+            scan_and_register_envs "$scan_dir"
             ;;
         config)
             # 配置管理
@@ -121,6 +141,7 @@ main() {
             echo "  deactivate  Deactivate current environment (requires shell-hook)"
             echo "  delete      Delete an environment"
             echo "  list        List all environments"
+            echo "  scan        Scan and register existing UV environments"
             echo "  init        Initialize uvm configuration"
             echo "  config      Manage configuration"
             echo "  shell-hook  Generate shell integration code"

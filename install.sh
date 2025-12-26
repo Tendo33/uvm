@@ -210,6 +210,72 @@ initialize_config() {
         echo "[]" > "${HOME}/.config/uvm/envs.json"
     fi
     
+    # 扫描并注册已存在的环境
+    if [ -d "$envs_dir" ]; then
+        print_info "Scanning for existing UV environments..."
+        
+        # 加载 uvm-config.sh 以使用扫描函数
+        local lib_dir="${HOME}/.local/lib/uvm"
+        if [ -f "${lib_dir}/uvm-config.sh" ]; then
+            source "${lib_dir}/uvm-config.sh"
+            
+            # 临时设置环境变量
+            export UVM_ENVS_DIR="$envs_dir"
+            
+            # 扫描环境
+            local registered_count=0
+            for env_dir in "${envs_dir}"/*; do
+                if [ -d "$env_dir" ]; then
+                    local env_name=$(basename "$env_dir")
+                    
+                    # 跳过隐藏目录和特殊文件
+                    if [[ "$env_name" == .* ]] || [[ "$env_name" == "desktop.ini" ]] || [[ "$env_name" == *.ico ]]; then
+                        continue
+                    fi
+                    
+                    # 检查是否是有效的虚拟环境
+                    if [ -f "${env_dir}/bin/activate" ] || [ -f "${env_dir}/Scripts/activate" ]; then
+                        if [ -f "${env_dir}/pyvenv.cfg" ]; then
+                            # 获取 Python 版本
+                            local python_version="unknown"
+                            if [ -f "${env_dir}/bin/python" ]; then
+                                python_version=$("${env_dir}/bin/python" --version 2>&1 | cut -d' ' -f2)
+                            elif [ -f "${env_dir}/Scripts/python.exe" ]; then
+                                python_version=$("${env_dir}/Scripts/python.exe" --version 2>&1 | cut -d' ' -f2)
+                            fi
+                            
+                            # 生成时间戳
+                            local timestamp
+                            if date --version >/dev/null 2>&1; then
+                                timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S%z")
+                            else
+                                timestamp=$(date +"%Y-%m-%dT%H:%M:%S%z")
+                            fi
+                            
+                            # 添加到 envs.json
+                            local record="{\"name\":\"${env_name}\",\"path\":\"${env_dir}\",\"python\":\"${python_version}\",\"created\":\"${timestamp}\"}"
+                            local envs_file="${HOME}/.config/uvm/envs.json"
+                            local content=$(cat "${envs_file}")
+                            
+                            if [ "$content" = "[]" ]; then
+                                echo "[${record}]" > "${envs_file}"
+                            else
+                                echo "${content%]},${record}]" > "${envs_file}"
+                            fi
+                            
+                            print_success "  Registered: ${env_name} (Python ${python_version})"
+                            registered_count=$((registered_count + 1))
+                        fi
+                    fi
+                fi
+            done
+            
+            if [ $registered_count -gt 0 ]; then
+                print_success "Registered ${registered_count} existing environment(s)"
+            fi
+        fi
+    fi
+    
     # 配置 UV 镜像
     print_info "Configuring UV mirrors (China mirrors)..."
     

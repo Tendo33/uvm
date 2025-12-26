@@ -325,6 +325,9 @@ COMMANDS:
     list                       List all environments
         -a, --all              Show all details
     
+    scan [directory]           Scan and register existing UV environments
+                               (default: scans UVM_ENVS_DIR)
+    
     help                       Show this help message
 
 EXAMPLES:

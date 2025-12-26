@@ -42,7 +42,7 @@ detect_shell_rc() {
 show_header() {
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║                  UVM Uninstaller v1.0.0                    ║"
+    echo "║                  UVM Uninstaller v1.0.1                    ║"
     echo "║          UV Manager - Conda-like Environment Manager       ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
@@ -207,7 +207,7 @@ show_post_uninstall() {
     fi
     
     echo "💡 To reinstall uvm later:"
-    echo "   git clone https://github.com/yourusername/uvm.git"
+    echo "   git clone https://github.com/Tendo33/uvm.git"
     echo "   cd uvm && ./install.sh"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

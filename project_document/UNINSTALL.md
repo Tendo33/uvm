@@ -38,7 +38,7 @@ cd /path/to/uvm
 
 ```
 ╔════════════════════════════════════════════════════════════╗
-║                  UVM Uninstaller v1.0.1                    ║
+║                  UVM Uninstaller v1.0.0                    ║
 ║          UV Manager - Conda-like Environment Manager       ║
 ╚════════════════════════════════════════════════════════════╝
 

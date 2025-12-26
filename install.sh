@@ -332,7 +332,7 @@ EOF
 # 下载 UVM 文件从 GitHub
 download_uvm_files() {
     local dest="$1"
-    local base_url="https://raw.githubusercontent.com/yourusername/uvm/main"
+    local base_url="https://raw.githubusercontent.com/Tendo33/uvm/main"
     
     print_info "Downloading uvm files from GitHub..."
     

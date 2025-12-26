@@ -362,7 +362,7 @@ CONFIGURATION:
     Config directory: ~/.config/uvm/
     UV config: ~/.config/uv/uv.toml
 
-For more information, visit: https://github.com/yourusername/uvm
+For more information, visit: https://github.com/Tendo33/uvm
 EOF
 }
 

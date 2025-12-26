@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Shell](https://img.shields.io/badge/Shell-Bash-green.svg)](https://www.gnu.org/software/bash/)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue.svg)](https://github.com/yourusername/uvm)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue.svg)](https://github.com/Tendo33/uvm)
 
 Simplify Python virtual environment management with UV's blazing-fast performance and Conda's intuitive commands.
 
@@ -45,13 +45,13 @@ Install uvm directly without cloning the repository:
 **Linux / macOS:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash
 ```
 
 **Or using wget:**
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash
 ```
 
 **Windows (Git Bash):**
@@ -61,7 +61,7 @@ wget -qO- https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | b
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # 2. Then install uvm in Git Bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash
 ```
 
 The installer features an **interactive wizard** that guides you through:
@@ -74,23 +74,23 @@ The installer features an **interactive wizard** that guides you through:
 **Non-interactive installation:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash -s -- -y
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash -s -- -y
 ```
 
 **Custom environment directory:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash -s -- --envs-dir /custom/path
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash -s -- --envs-dir /custom/path
 ```
 
 **Install from specific version:**
 
 ```bash
 # Install from a specific tag
-curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/v1.0.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/v1.0.1/install.sh | bash
 
 # Install from development branch
-curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/dev/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/dev/install.sh | bash
 ```
 
 ### Manual Installation (For Development)
@@ -98,7 +98,7 @@ curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/dev/install.sh | b
 If you want to modify uvm or contribute:
 
 ```bash
-git clone https://github.com/yourusername/uvm.git
+git clone https://github.com/Tendo33/uvm.git
 cd uvm
 ./install.sh
 ```
@@ -472,7 +472,17 @@ For detailed troubleshooting steps, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 🗑️ Uninstall
 
-To remove UVM from your system:
+### One-Command Uninstall (Recommended)
+
+Remove UVM directly without cloning the repository:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/uninstall.sh | bash
+```
+
+### Manual Uninstall
+
+If you have the repository cloned:
 
 ```bash
 cd /path/to/uvm
@@ -489,14 +499,14 @@ cd /path/to/uvm
 - UV itself
 - UV configuration (`~/.config/uv/uv.toml`)
 
-📖 **Detailed guide:** [UNINSTALL.md](UNINSTALL.md)
+📖 **Detailed guide:** [UNINSTALL.md](project_document/UNINSTALL.md)
 
 ---
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/uvm/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/uvm/discussions)
+- **Issues**: [GitHub Issues](https://github.com/Tendo33/uvm/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Tendo33/uvm/discussions)
 
 ---
 

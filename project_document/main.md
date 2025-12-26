@@ -139,7 +139,7 @@ The `install.sh` script supports two execution modes:
 Users can install directly via curl/wget:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash
 ```
 
 **Process:**
@@ -173,7 +173,7 @@ curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | 
 Developers can clone and install:
 
 ```bash
-git clone https://github.com/yourusername/uvm.git
+git clone https://github.com/Tendo33/uvm.git
 cd uvm
 ./install.sh
 ```

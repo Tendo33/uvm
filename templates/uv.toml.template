@@ -1,0 +1,10 @@
+
+# PyPI 镜像源配置（清华大学镜像）
+[[index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+# Python 解释器下载镜像
+[python-downloads]
+url = "https://mirrors.tuna.tsinghua.edu.cn/python-releases/"
+

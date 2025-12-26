@@ -1,0 +1,134 @@
+#!/bin/bash
+
+
+set -e
+
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="$(cd "${SCRIPT_DIR}/../lib" && pwd)"
+
+# 设置默认环境变量
+export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
+export UVM_ENVS_DIR="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
+
+# 加载核心模块
+source "${LIB_DIR}/uvm-config.sh"
+source "${LIB_DIR}/uvm-core.sh"
+source "${LIB_DIR}/uvm-shell-hooks.sh"
+
+# 版本信息
+UVM_VERSION="1.0.0"
+
+# 显示版本信息
+show_version() {
+    echo "uvm version ${UVM_VERSION}"
+    echo "UV Manager - A Conda-like environment manager for UV"
+}
+
+# 主命令路由
+main() {
+    local command="$1"
+    shift || true
+    
+    case "$command" in
+        create)
+            uvm_create "$@"
+            ;;
+        activate)
+            echo "Note: 'uvm activate' must be run with shell integration."
+            echo "Add this to your ~/.bashrc or ~/.zshrc:"
+            echo "    eval \"\$(uvm shell-hook)\""
+            echo ""
+            echo "Then you can use: uvm activate <env_name>"
+            return 1
+            ;;
+        deactivate)
+            echo "Note: 'uvm deactivate' must be run with shell integration."
+            echo "Add this to your ~/.bashrc or ~/.zshrc:"
+            echo "    eval \"\$(uvm shell-hook)\""
+            echo ""
+            echo "Then you can use: uvm deactivate"
+            return 1
+            ;;
+        delete|remove|rm)
+            uvm_delete "$@"
+            ;;
+        list|ls)
+            uvm_list "$@"
+            ;;
+        shell-hook)
+            # 生成 Shell 钩子代码
+            uvm_generate_shell_hook
+            ;;
+        init)
+            # 初始化配置
+            echo "Initializing uvm..."
+            init_uvm_config
+            setup_uv_mirror
+            echo ""
+            echo "✓ uvm initialized successfully"
+            echo ""
+            echo "To enable auto-activation, add this to your ~/.bashrc or ~/.zshrc:"
+            echo "    eval \"\$(uvm shell-hook)\""
+            ;;
+        config)
+            # 配置管理
+            local subcommand="$1"
+            shift || true
+            
+            case "$subcommand" in
+                mirror|mirrors)
+                    setup_uv_mirror
+                    ;;
+                show)
+                    echo "UVM Configuration:"
+                    echo "  UVM_HOME: ${UVM_HOME}"
+                    echo "  UVM_ENVS_DIR: ${UVM_ENVS_DIR}"
+                    echo "  Shell: $(detect_shell)"
+                    echo "  Shell RC: $(get_shell_rc_file)"
+                    ;;
+                *)
+                    echo "Usage: uvm config <subcommand>"
+                    echo ""
+                    echo "Subcommands:"
+                    echo "  mirror    Configure UV mirrors"
+                    echo "  show      Show current configuration"
+                    ;;
+            esac
+            ;;
+        help|--help|-h)
+            uvm_help
+            ;;
+        version|--version|-v)
+            show_version
+            ;;
+        "")
+            echo "uvm: UV Manager - A Conda-like environment manager"
+            echo ""
+            echo "Usage: uvm <command> [options]"
+            echo ""
+            echo "Commands:"
+            echo "  create      Create a new environment"
+            echo "  activate    Activate an environment (requires shell-hook)"
+            echo "  deactivate  Deactivate current environment (requires shell-hook)"
+            echo "  delete      Delete an environment"
+            echo "  list        List all environments"
+            echo "  init        Initialize uvm configuration"
+            echo "  config      Manage configuration"
+            echo "  shell-hook  Generate shell integration code"
+            echo "  help        Show detailed help"
+            echo "  version     Show version information"
+            echo ""
+            echo "Run 'uvm help' for more information"
+            ;;
+        *)
+            echo "Error: Unknown command: $command"
+            echo "Run 'uvm help' for usage information"
+            return 1
+            ;;
+    esac
+}
+
+# 执行主函数
+main "$@"
+

@@ -10,7 +10,7 @@
 
 Simplify Python virtual environment management with UV's blazing-fast performance and Conda's intuitive commands.
 
-[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Usage](#-usage) • [Auto-Activation](#-auto-activation) • [Uninstall](#-uninstall)
+[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Usage](#-usage) • [Auto-Activation](#-auto-activation) • [Troubleshooting](#-troubleshooting) • [Uninstall](#-uninstall)
 
 </div>
 
@@ -431,6 +431,31 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [astral-sh/uv](https://github.com/astral-sh/uv) - The blazing-fast Python package installer
 - [uv-custom](https://github.com/Wangnov/uv-custom) - Inspiration for China mirror configuration
 - [Conda](https://docs.conda.io/) - Command design inspiration
+
+---
+
+## 🔧 Troubleshooting
+
+### "Environment not found" Error
+
+If `uvm list` shows your environments but `uvm activate` fails:
+
+1. **Reload your shell configuration**:
+   ```bash
+   source ~/.bashrc  # or ~/.zshrc for Zsh
+   ```
+
+2. **Verify shell hook is loaded**:
+   ```bash
+   type uvm  # Should show "uvm is a function"
+   ```
+
+3. **Register existing environments**:
+   ```bash
+   uvm scan /path/to/your/envs
+   ```
+
+For detailed troubleshooting steps, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ---
 

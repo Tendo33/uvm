@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-12-26
+
+### Fixed
+- **Critical:** Fixed configuration file corruption during interactive installation
+  - `check_uv()` output was polluting the config file when UV was already installed
+  - Custom environment directory path was being overwritten with UV version message
+  - Added proper output redirection (`>&2`) to prevent stdout pollution
+  - Affects: Interactive installation with UV already installed + custom directory
+  - See [BUGFIX_CONFIG.md](BUGFIX_CONFIG.md) for detailed analysis
+
+### Added
+- Uninstall script (`uninstall.sh`) with interactive and force modes
+- Comprehensive uninstallation documentation ([UNINSTALL.md](UNINSTALL.md))
+- Automatic shell config backup during uninstallation
+- Bug fix documentation ([BUGFIX_CONFIG.md](BUGFIX_CONFIG.md))
+
+### Changed
+- Simplified interactive installation prompts for better UX
+- Improved environment directory selection (removed confusing numbered options)
+- Enhanced installation wizard with clearer step-by-step guidance
+
+---
+
 ## [1.0.0] - 2025-12-26
 
 ### Added

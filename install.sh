@@ -361,7 +361,8 @@ interactive_setup() {
     echo "" >&2
     
     local install_uv_choice="n"
-    if ! check_uv 2>&1 >&2; then
+    # 检查 UV 是否安装（重定向输出到 stderr）
+    if ! check_uv >&2; then
         echo "" >&2
         local os=$(detect_os)
         if [ "$os" = "windows" ]; then
@@ -377,11 +378,6 @@ interactive_setup() {
             read -p "Would you like to install UV now? (y/n) [y]: " install_uv_choice
             install_uv_choice=${install_uv_choice:-y}
         fi
-    else
-        # UV 已安装，显示版本信息到 stderr
-        local uv_version=$(uv --version 2>&1 | head -n 1)
-        print_success "UV is already installed: $uv_version" >&2
-        echo "" >&2
     fi
     echo "" >&2
     

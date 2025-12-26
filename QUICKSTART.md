@@ -1,150 +1,153 @@
-# uvm Quick Start Guide
+# uvm 快速入门指南
 
-Get started with uvm in 5 minutes!
+5 分钟快速上手 uvm！
 
-## 🚀 Installation (2 minutes)
+## 🚀 安装（2 分钟）
 
-### One-Command Installation
+### 推荐方式：先下载后执行
 
-**Linux / macOS:**
+**Linux / macOS：**
 
 ```bash
-# Install uvm with interactive wizard
-curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash
+# 下载安装脚本
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh -o install.sh
+
+# 执行安装（交互式向导）
+bash install.sh
+
+# 按照向导进行：
+# - 第 1/3 步：环境目录（默认：~/uv_envs，按回车或输入自定义路径）
+# - 第 2/3 步：安装 UV（如未安装会自动检测）
+# - 第 3/3 步：启用自动激活？（默认：是）
+
+# 重新加载 Shell
+source ~/.bashrc  # 或 ~/.zshrc
 ```
 
-**Follow the wizard:**
-- **Step 1/3**: Environment directory (default: ~/uv_envs, press Enter or type custom path)
-- **Step 2/3**: Install UV if needed (auto-detected)
-- **Step 3/3**: Enable auto-activation? (default: Yes)
+### Windows（Git Bash）
 
 ```bash
-# Reload your shell
-source ~/.bashrc  # or ~/.zshrc
-```
-
-### Windows (Git Bash)
-
-```bash
-# 1. Install UV in PowerShell first
+# 1. 首先在 PowerShell 中安装 UV
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# 2. Install uvm in Git Bash
-curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash
+# 2. 在 Git Bash 中下载并执行安装脚本
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh -o install.sh
+bash install.sh
 
-# 3. Reload your shell
+# 3. 重新加载 Shell
 source ~/.bashrc
 ```
 
-### Quick Install (Skip Wizard)
+### 快速安装（跳过向导）
 
 ```bash
-# Use defaults for everything
-curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash -s -- -y
+# 使用默认配置
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh -o install.sh
+bash install.sh -y
 ```
 
-## 🎯 Enable Auto-Activation (30 seconds)
+## 🎯 启用自动激活（30 秒）
 
 ```bash
-# Add shell integration to your ~/.bashrc or ~/.zshrc
+# 将 Shell 集成添加到 ~/.bashrc 或 ~/.zshrc
 echo 'eval "$(uvm shell-hook)"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-## 📦 Create Your First Environment (1 minute)
+## 📦 创建第一个环境（1 分钟）
 
 ```bash
-# Create an environment with Python 3.11
+# 创建 Python 3.11 环境
 uvm create myenv --python 3.11
 
-# Activate it
+# 激活环境
 uvm activate myenv
 
-# Install some packages
+# 安装一些包
 pip install requests numpy pandas
 
-# Verify
-python -c "import pandas; print('✓ pandas installed')"
+# 验证
+python -c "import pandas; print('✓ pandas 已安装')"
 ```
 
-## 🔄 Try Auto-Activation (2 minutes)
+## 🔄 体验自动激活（2 分钟）
 
-### Option 1: Local Project Environment
+### 方式 1：本地项目环境
 
 ```bash
-# Create a new project
+# 创建新项目
 mkdir ~/my-project
 cd ~/my-project
 
-# Create a local .venv
+# 创建本地 .venv
 uv venv
 uv pip install requests
 
-# Leave and re-enter - watch it auto-activate!
+# 离开并重新进入 - 观察自动激活！
 cd ~
 cd ~/my-project
 # 🔄 Auto-activating local .venv
 ```
 
-### Option 2: Shared Environment
+### 方式 2：共享环境
 
 ```bash
-# Create a shared environment
+# 创建共享环境
 uvm create shared-env --python 3.11
 
-# Create a project that uses it
+# 创建使用它的项目
 mkdir ~/another-project
 cd ~/another-project
 echo "shared-env" > .uvmrc
 
-# Enter the directory - auto-activates!
+# 进入目录 - 自动激活！
 cd ~/another-project
 # 🔄 Auto-activating uvm environment: shared-env
 ```
 
-## 🎉 You're Ready!
+## 🎉 准备就绪！
 
-Common commands:
-
-```bash
-uvm list          # List all environments
-uvm activate env  # Activate an environment
-uvm deactivate    # Deactivate current environment
-uvm delete env    # Delete an environment
-uvm help          # Show help
-```
-
-## 📚 Next Steps
-
-- Read the full [README.md](README.md) for detailed documentation
-- Check out [EXAMPLES.md](EXAMPLES.md) for real-world usage scenarios
-- Configure custom settings with `uvm config`
-
-## 🗑️ Uninstall
-
-If you need to remove UVM:
+常用命令：
 
 ```bash
-# One-command uninstall
-curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/uninstall.sh | bash
+uvm list          # 列出所有环境
+uvm activate env  # 激活环境
+uvm deactivate    # 停用当前环境
+uvm delete env    # 删除环境
+uvm help          # 显示帮助
 ```
 
-**What happens:**
-- ✅ Removes UVM files
-- ✅ Cleans shell integration  
-- ✅ Keeps your environments safe
+## 📚 下一步
 
-📖 **Full guide:** [UNINSTALL.md](UNINSTALL.md)
+- 阅读完整的 [README.md](README.md) 获取详细文档
+- 查看 [EXAMPLES.md](EXAMPLES.md) 了解真实使用场景
+- 使用 `uvm config` 配置自定义设置
+
+## 🗑️ 卸载
+
+如需移除 UVM：
+
+```bash
+# 下载并执行卸载脚本
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/uninstall.sh -o uninstall.sh
+bash uninstall.sh
+```
+
+**卸载过程：**
+- ✅ 移除 UVM 文件
+- ✅ 清理 Shell 集成
+- ✅ 保留您的环境
+
+📖 **完整指南：** [UNINSTALL.md](UNINSTALL.md)
 
 ---
 
-## ❓ Need Help?
+## ❓ 需要帮助？
 
-- Run `uvm help` for command reference
-- Check [README.md#troubleshooting](README.md#-troubleshooting) for common issues
-- Open an issue on GitHub
+- 运行 `uvm help` 查看命令参考
+- 查看 [README.md#故障排除](README.md#-故障排除) 解决常见问题
+- 在 GitHub 上提交 Issue
 
 ---
 
-**Happy coding with uvm! 🎉**
-
+**使用 uvm 愉快编码！🎉**

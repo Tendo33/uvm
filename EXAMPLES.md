@@ -1,186 +1,186 @@
-# uvm Usage Examples
+# uvm 使用示例
 
-This document provides practical examples for common uvm usage scenarios.
+本文档提供 uvm 常见使用场景的实际示例。
 
-## Table of Contents
+## 目录
 
-- [Basic Workflow](#basic-workflow)
-- [Project-Specific Environments](#project-specific-environments)
-- [Multiple Python Versions](#multiple-python-versions)
-- [Shared Environments](#shared-environments)
-- [Migration from Conda](#migration-from-conda)
+- [基本工作流](#基本工作流)
+- [项目专属环境](#项目专属环境)
+- [多 Python 版本](#多-python-版本)
+- [共享环境](#共享环境)
+- [从 Conda 迁移](#从-conda-迁移)
 
 ---
 
-## Basic Workflow
+## 基本工作流
 
-### Creating Your First Environment
+### 创建第一个环境
 
 ```bash
-# Create an environment with the default Python version
+# 使用默认 Python 版本创建环境
 uvm create myenv
 
-# Create with a specific Python version
+# 使用指定 Python 版本创建
 uvm create data-science --python 3.11
 ```
 
-### Installing Packages
+### 安装包
 
 ```bash
-# Activate the environment
+# 激活环境
 uvm activate data-science
 
-# Install packages using pip (UV accelerated)
+# 使用 pip 安装包（UV 加速）
 pip install numpy pandas matplotlib scikit-learn
 
-# Or use uv directly for even faster installation
+# 或直接使用 uv，更快
 uv pip install numpy pandas matplotlib scikit-learn
 
-# Verify installation
+# 验证安装
 python -c "import pandas; print(pandas.__version__)"
 ```
 
-### Listing and Managing Environments
+### 列出和管理环境
 
 ```bash
-# List all environments
+# 列出所有环境
 uvm list
 
-# Output example:
+# 输出示例：
 #   data-science              Python 3.11.5      /home/user/uv_envs/data-science
 # * myenv                     Python 3.12.0      /home/user/uv_envs/myenv
 
-# Delete an environment
+# 删除环境
 uvm delete myenv
 ```
 
 ---
 
-## Project-Specific Environments
+## 项目专属环境
 
-### Scenario 1: Modern Project with pyproject.toml
+### 场景 1：使用 pyproject.toml 的现代项目
 
 ```bash
-# Navigate to your project
+# 进入项目目录
 cd ~/projects/my-fastapi-app
 
-# Create a local .venv
+# 创建本地 .venv
 uv venv
 
-# Install dependencies
+# 安装依赖
 uv pip install -r requirements.txt
-# or
-uv sync  # if using pyproject.toml
+# 或
+uv sync  # 如果使用 pyproject.toml
 
-# The environment auto-activates when you cd into the directory
+# cd 进入目录时环境自动激活
 cd ~/projects/my-fastapi-app
 # 🔄 Auto-activating local .venv
 
-# Run your application
+# 运行应用
 python main.py
 
-# Leave the directory
+# 离开目录
 cd ~
 # 🔻 Deactivating environment (left project directory)
 ```
 
-### Scenario 2: Legacy Project with requirements.txt
+### 场景 2：使用 requirements.txt 的老项目
 
 ```bash
-# Create a shared environment
+# 创建共享环境
 uvm create legacy-app --python 3.9
 
-# Navigate to your project
+# 进入项目目录
 cd ~/projects/legacy-app
 
-# Link the environment using .uvmrc
+# 使用 .uvmrc 链接环境
 echo "legacy-app" > .uvmrc
 
-# Install dependencies
+# 安装依赖
 pip install -r requirements.txt
 
-# The environment auto-activates
+# 环境自动激活
 cd ~/projects/legacy-app
 # 🔄 Auto-activating uvm environment: legacy-app
 ```
 
 ---
 
-## Multiple Python Versions
+## 多 Python 版本
 
-### Testing Across Python Versions
+### 跨 Python 版本测试
 
 ```bash
-# Create environments for different Python versions
+# 为不同 Python 版本创建环境
 uvm create py38 --python 3.8
 uvm create py39 --python 3.9
 uvm create py310 --python 3.10
 uvm create py311 --python 3.11
 uvm create py312 --python 3.12
 
-# Test your package in Python 3.8
+# 在 Python 3.8 中测试
 uvm activate py38
 python -m pytest tests/
 
-# Test in Python 3.11
+# 在 Python 3.11 中测试
 uvm deactivate
 uvm activate py311
 python -m pytest tests/
 
-# List all test environments
+# 列出所有测试环境
 uvm list
 ```
 
-### Development vs Production Environments
+### 开发 vs 生产环境
 
 ```bash
-# Development environment with latest Python
+# 使用最新 Python 的开发环境
 uvm create dev --python 3.12
 uvm activate dev
-pip install -r requirements-dev.txt  # includes pytest, black, mypy
+pip install -r requirements-dev.txt  # 包含 pytest, black, mypy
 
-# Production environment with stable Python
+# 使用稳定 Python 的生产环境
 uvm create prod --python 3.11
 uvm activate prod
-pip install -r requirements.txt  # only production dependencies
+pip install -r requirements.txt  # 仅生产依赖
 ```
 
 ---
 
-## Shared Environments
+## 共享环境
 
-### Scenario: Multiple Projects Sharing Dependencies
+### 场景：多项目共享依赖
 
 ```bash
-# Create a shared data science environment
+# 创建共享的数据科学环境
 uvm create ds-common --python 3.11
 uvm activate ds-common
 pip install numpy pandas matplotlib scikit-learn jupyter
 
-# Project 1: Sales Analysis
+# 项目 1：销售分析
 cd ~/projects/sales-analysis
 echo "ds-common" > .uvmrc
-# Auto-activates ds-common when entering
+# 进入时自动激活 ds-common
 
-# Project 2: Customer Segmentation
+# 项目 2：客户细分
 cd ~/projects/customer-segmentation
 echo "ds-common" > .uvmrc
-# Auto-activates ds-common when entering
+# 进入时自动激活 ds-common
 
-# Both projects share the same environment
+# 两个项目共享同一环境
 ```
 
-### Scenario: Learning Environment
+### 场景：学习环境
 
 ```bash
-# Create a learning environment
+# 创建学习环境
 uvm create learning --python 3.11
 uvm activate learning
 
-# Install common learning packages
+# 安装常用学习包
 pip install requests beautifulsoup4 flask django
 
-# Create multiple learning projects
+# 创建多个学习项目
 mkdir -p ~/learning/web-scraping
 cd ~/learning/web-scraping
 echo "learning" > .uvmrc
@@ -189,70 +189,70 @@ mkdir -p ~/learning/flask-tutorial
 cd ~/learning/flask-tutorial
 echo "learning" > .uvmrc
 
-# All learning projects use the same environment
+# 所有学习项目使用同一环境
 ```
 
 ---
 
-## Migration from Conda
+## 从 Conda 迁移
 
-### Conda to uvm Command Mapping
+### Conda 与 uvm 命令对照
 
-| Conda Command | uvm Equivalent | Notes |
-|---------------|----------------|-------|
+| Conda 命令 | uvm 等效命令 | 备注 |
+|------------|--------------|------|
 | `conda create -n myenv python=3.11` | `uvm create myenv --python 3.11` | ✅ |
-| `conda activate myenv` | `uvm activate myenv` | Requires shell-hook |
-| `conda deactivate` | `uvm deactivate` | Requires shell-hook |
+| `conda activate myenv` | `uvm activate myenv` | 需要 shell-hook |
+| `conda deactivate` | `uvm deactivate` | 需要 shell-hook |
 | `conda env list` | `uvm list` | ✅ |
 | `conda remove -n myenv --all` | `uvm delete myenv` | ✅ |
-| `conda install package` | `pip install package` | Use pip/uv pip |
-| `conda env export` | `pip freeze > requirements.txt` | Manual export |
+| `conda install package` | `pip install package` | 使用 pip/uv pip |
+| `conda env export` | `pip freeze > requirements.txt` | 手动导出 |
 
-### Migration Example
+### 迁移示例
 
-**Before (Conda):**
+**迁移前（Conda）：**
 
 ```bash
-# Create environment
+# 创建环境
 conda create -n myproject python=3.11
 
-# Activate
+# 激活
 conda activate myproject
 
-# Install packages
+# 安装包
 conda install numpy pandas matplotlib
 
-# Deactivate
+# 停用
 conda deactivate
 ```
 
-**After (uvm):**
+**迁移后（uvm）：**
 
 ```bash
-# Create environment
+# 创建环境
 uvm create myproject --python 3.11
 
-# Activate (after enabling shell-hook)
+# 激活（启用 shell-hook 后）
 uvm activate myproject
 
-# Install packages (faster with UV)
+# 安装包（使用 UV 更快）
 pip install numpy pandas matplotlib
-# or
+# 或
 uv pip install numpy pandas matplotlib
 
-# Deactivate
+# 停用
 uvm deactivate
 ```
 
-### Exporting Conda Environment to uvm
+### 导出 Conda 环境到 uvm
 
 ```bash
-# In your conda environment
+# 在 conda 环境中
 conda activate myenv
 pip freeze > requirements.txt
 conda deactivate
 
-# Create equivalent uvm environment
+# 创建等效的 uvm 环境
 uvm create myenv --python 3.11
 uvm activate myenv
 pip install -r requirements.txt
@@ -260,39 +260,39 @@ pip install -r requirements.txt
 
 ---
 
-## Advanced Patterns
+## 高级模式
 
-### Temporary Testing Environment
+### 临时测试环境
 
 ```bash
-# Create a temporary environment
+# 创建临时环境
 uvm create temp-test --python 3.11
 
-# Activate and test
+# 激活并测试
 uvm activate temp-test
 pip install some-experimental-package
 python test_script.py
 
-# Clean up
+# 清理
 uvm deactivate
 uvm delete temp-test --force
 ```
 
-### Custom Environment Location
+### 自定义环境位置
 
 ```bash
-# Create environment on external drive
+# 在外部驱动器上创建环境
 uvm create bigdata --python 3.11 --path /mnt/external/envs/bigdata
 
-# Still managed by uvm
-uvm list  # Shows custom path
-uvm activate bigdata  # Works normally
+# 仍由 uvm 管理
+uvm list  # 显示自定义路径
+uvm activate bigdata  # 正常工作
 ```
 
-### Quick Package Testing
+### 快速包测试
 
 ```bash
-# Create, activate, test, and delete in one session
+# 在一个会话中创建、激活、测试和删除
 uvm create test-pkg --python 3.11
 uvm activate test-pkg
 pip install new-package
@@ -303,130 +303,130 @@ uvm delete test-pkg --force
 
 ---
 
-## Tips and Best Practices
+## 技巧和最佳实践
 
-### 1. Use Local `.venv` for Projects
+### 1. 项目使用本地 `.venv`
 
-For modern projects with `pyproject.toml`, prefer local `.venv`:
+对于使用 `pyproject.toml` 的现代项目，优先使用本地 `.venv`：
 
 ```bash
 cd ~/projects/myapp
 uv venv
 uv sync
-# Auto-activates, no .uvmrc needed
+# 自动激活，无需 .uvmrc
 ```
 
-### 2. Use Shared Environments for Learning
+### 2. 学习使用共享环境
 
-For learning and experimentation, use shared environments:
+用于学习和实验时，使用共享环境：
 
 ```bash
 uvm create learning --python 3.11
-# Reuse across multiple learning projects
+# 跨多个学习项目复用
 ```
 
-### 3. Pin Python Versions in Production
+### 3. 生产环境锁定 Python 版本
 
-Always specify Python version for production environments:
+生产环境始终指定 Python 版本：
 
 ```bash
-uvm create prod-api --python 3.11.5  # Pin exact version
+uvm create prod-api --python 3.11.5  # 锁定精确版本
 ```
 
-### 4. Use `uv pip` for Faster Installation
+### 4. 使用 `uv pip` 加速安装
 
 ```bash
 uvm activate myenv
-uv pip install -r requirements.txt  # Much faster than pip
+uv pip install -r requirements.txt  # 比 pip 快得多
 ```
 
-### 5. Regular Cleanup
+### 5. 定期清理
 
 ```bash
-# List all environments
+# 列出所有环境
 uvm list
 
-# Delete unused environments
+# 删除不用的环境
 uvm delete old-project --force
 uvm delete temp-env --force
 ```
 
 ---
 
-## Troubleshooting Examples
+## 故障排除示例
 
-### Problem: Environment Not Auto-Activating
+### 问题：环境不自动激活
 
-**Solution:**
+**解决方法：**
 
 ```bash
-# 1. Check if shell-hook is enabled
+# 1. 检查 shell-hook 是否启用
 grep "uvm shell-hook" ~/.bashrc
 
-# 2. If not found, add it
+# 2. 如果没有，添加它
 echo 'eval "$(uvm shell-hook)"' >> ~/.bashrc
 source ~/.bashrc
 
-# 3. Test
+# 3. 测试
 cd ~/projects/myapp
-# Should see: 🔄 Auto-activating...
+# 应该看到：🔄 Auto-activating...
 ```
 
-### Problem: Wrong Environment Activated
+### 问题：激活了错误的环境
 
-**Solution:**
+**解决方法：**
 
 ```bash
-# Check current directory for .venv or .uvmrc
+# 检查当前目录是否有 .venv 或 .uvmrc
 ls -la | grep -E "\.venv|\.uvmrc"
 
-# .venv takes priority over .uvmrc
-# Remove .uvmrc if you want to use .venv
+# .venv 优先级高于 .uvmrc
+# 如果想使用 .venv，删除 .uvmrc
 rm .uvmrc
 ```
 
-### Problem: Slow Package Installation
+### 问题：包安装慢
 
-**Solution:**
+**解决方法：**
 
 ```bash
-# Verify mirrors are configured
+# 验证镜像配置
 cat ~/.config/uv/uv.toml
 
-# Should show Tsinghua mirrors
-# If not, reconfigure
+# 应该显示清华镜像
+# 如果没有，重新配置
 uvm config mirror
 
-# Use uv pip instead of pip
-uv pip install package  # Much faster
+# 使用 uv pip 代替 pip
+uv pip install package  # 快得多
 ```
 
 ---
 
-## Real-World Workflows
+## 实际工作流
 
-### Web Development
+### Web 开发
 
 ```bash
-# Backend API
+# 后端 API
 cd ~/projects/backend-api
 uv venv
 uv pip install fastapi uvicorn sqlalchemy
 
-# Frontend (if using Python tools)
+# 前端（如果使用 Python 工具）
 cd ~/projects/frontend
-echo "backend-api" > .uvmrc  # Share backend environment
+echo "backend-api" > .uvmrc  # 共享后端环境
 ```
 
-### Data Science
+### 数据科学
 
 ```bash
-# Create DS environment
+# 创建数据科学环境
 uvm create ds --python 3.11
 uvm activate ds
 uv pip install numpy pandas matplotlib seaborn jupyter scikit-learn
 
-# Use in multiple notebooks
+# 在多个 notebook 中使用
 cd ~/notebooks/analysis1
 echo "ds" > .uvmrc
 
@@ -434,15 +434,15 @@ cd ~/notebooks/analysis2
 echo "ds" > .uvmrc
 ```
 
-### Testing and CI/CD
+### 测试和 CI/CD
 
 ```bash
-# Create test environments
+# 创建测试环境
 uvm create test-py38 --python 3.8
 uvm create test-py311 --python 3.11
 uvm create test-py312 --python 3.12
 
-# Run tests in each
+# 在每个环境中运行测试
 for env in test-py38 test-py311 test-py312; do
     uvm activate $env
     pytest tests/
@@ -452,5 +452,4 @@ done
 
 ---
 
-For more information, see the main [README.md](README.md).
-
+更多信息请参阅 [README.md](README.md)。

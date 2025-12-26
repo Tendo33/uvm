@@ -17,17 +17,24 @@
 
 ## 🚀 快速卸载
 
-### 一键卸载（推荐）
+### 推荐方式：先下载后执行
 
-无需克隆仓库,直接执行:
+为了交互式确认能正常工作，请先下载脚本再执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/uninstall.sh | bash
+# 下载卸载脚本
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/uninstall.sh -o uninstall.sh
+
+# 执行卸载（交互式确认）
+bash uninstall.sh
+
+# 卸载完成后删除脚本
+rm uninstall.sh
 ```
 
-### 交互式卸载（本地方式）
+### 本地方式
 
-如果已克隆仓库:
+如果已克隆仓库：
 
 ```bash
 cd /path/to/uvm

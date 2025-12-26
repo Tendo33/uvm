@@ -25,7 +25,7 @@ source "${LIB_DIR}/uvm-core.sh"
 source "${LIB_DIR}/uvm-shell-hooks.sh"
 
 # 版本信息
-UVM_VERSION="1.0.0"
+UVM_VERSION="1.0.1"
 
 # 显示版本信息
 show_version() {

@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - See [BUGFIX_CONFIG.md](BUGFIX_CONFIG.md) for detailed analysis
 
 ### Added
+- **One-command remote installation** via curl/wget without cloning repository
+- Support for installing from specific version tags or branches
 - Uninstall script (`uninstall.sh`) with interactive and force modes
 - Comprehensive uninstallation documentation ([UNINSTALL.md](UNINSTALL.md))
 - Automatic shell config backup during uninstallation
@@ -90,5 +92,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.0.1]: https://github.com/yourusername/uvm/releases/tag/v1.0.1
 [1.0.0]: https://github.com/yourusername/uvm/releases/tag/v1.0.0
 

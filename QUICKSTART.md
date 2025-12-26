@@ -4,15 +4,13 @@ Get started with uvm in 5 minutes!
 
 ## 🚀 Installation (2 minutes)
 
-### Linux / macOS
+### One-Command Installation
+
+**Linux / macOS:**
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/uvm.git
-cd uvm
-
-# Run the interactive installer
-./install.sh
+# Install uvm with interactive wizard
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
 ```
 
 **Follow the wizard:**
@@ -31,10 +29,8 @@ source ~/.bashrc  # or ~/.zshrc
 # 1. Install UV in PowerShell first
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# 2. Run the interactive installer in Git Bash
-git clone https://github.com/yourusername/uvm.git
-cd uvm
-./install.sh
+# 2. Install uvm in Git Bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
 
 # 3. Reload your shell
 source ~/.bashrc
@@ -44,7 +40,7 @@ source ~/.bashrc
 
 ```bash
 # Use defaults for everything
-./install.sh -y
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash -s -- -y
 ```
 
 ## 🎯 Enable Auto-Activation (30 seconds)

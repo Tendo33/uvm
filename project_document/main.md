@@ -1,7 +1,7 @@
 # UVM Project Documentation
 
 **Project Name**: uvm - UV Manager  
-**Version**: 1.0.0  
+**Version**: 1.0.1  
 **Date**: 2025-12-26  
 **Status**: ✅ Completed
 
@@ -132,20 +132,53 @@ graph TD
 
 ## 📦 Installation Process
 
-The `install.sh` script performs the following:
+The `install.sh` script supports two execution modes:
 
-1. **Detect OS**: Linux, macOS, or Windows
-2. **Check UV**: Verify UV installation (offer to install if missing)
-3. **Install uvm**:
+### Remote Installation (Recommended)
+
+Users can install directly via curl/wget:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
+```
+
+**Process:**
+1. **Detect Execution Mode**: Check if `bin/` directory exists
+2. **Download Files** (if remote):
+   - Create temporary directory with `mktemp -d`
+   - Download 5 files from GitHub raw URL:
+     * `bin/uvm`
+     * `lib/uvm-config.sh`
+     * `lib/uvm-core.sh`
+     * `lib/uvm-shell-hooks.sh`
+     * `templates/uv.toml.template`
+   - Use curl (primary) or wget (fallback)
+   - Set trap for cleanup on exit
+3. **Detect OS**: Linux, macOS, or Windows
+4. **Check UV**: Verify UV installation (offer to install if missing)
+5. **Install uvm**:
    - Copy `bin/uvm` to `~/.local/bin/`
    - Copy `lib/*` to `~/.local/lib/uvm/`
    - Copy `templates/*` to `~/.config/uvm/templates/`
-4. **Configure PATH**: Add `~/.local/bin` to PATH if needed
-5. **Initialize Config**:
+6. **Configure PATH**: Add `~/.local/bin` to PATH if needed
+7. **Initialize Config**:
    - Create `~/.config/uvm/`
    - Create `~/uv_envs/`
    - Configure UV mirrors in `~/.config/uv/uv.toml`
-6. **Post-Install Instructions**: Guide user to enable shell-hook
+8. **Cleanup**: Remove temporary directory (if remote)
+9. **Post-Install Instructions**: Guide user to enable shell-hook
+
+### Local Installation (For Development)
+
+Developers can clone and install:
+
+```bash
+git clone https://github.com/yourusername/uvm.git
+cd uvm
+./install.sh
+```
+
+**Process:** Same as remote, but skips step 2 (download) and uses local files directly
 
 ---
 

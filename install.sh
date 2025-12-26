@@ -91,6 +91,8 @@ install_uv() {
 
 # 安装 UVM
 install_uvm() {
+    local source_dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+    
     print_info "Installing uvm..."
     
     # 确定安装目录
@@ -101,8 +103,8 @@ install_uvm() {
     mkdir -p "$install_dir"
     mkdir -p "$uvm_lib_dir"
     
-    # 获取脚本所在目录
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # 使用传入的源目录
+    local script_dir="$source_dir"
     
     # 复制文件
     print_info "Copying files..."
@@ -322,6 +324,65 @@ EOF
     print_success "Configuration initialized"
 }
 
+# {{RIPER-7 Action}}
+# Role: LD | Task_ID: remote-install | Time: 2025-12-26T16:15:00+08:00
+# Logic: 添加远程下载功能,支持 curl/wget 直接执行安装
+# Principle: SOLID-S (单一职责)
+
+# 下载 UVM 文件从 GitHub
+download_uvm_files() {
+    local dest="$1"
+    local base_url="https://raw.githubusercontent.com/yourusername/uvm/main"
+    
+    print_info "Downloading uvm files from GitHub..."
+    
+    # 创建目录结构
+    mkdir -p "$dest/bin" "$dest/lib" "$dest/templates"
+    
+    # 下载文件列表
+    local files=(
+        "bin/uvm"
+        "lib/uvm-config.sh"
+        "lib/uvm-core.sh"
+        "lib/uvm-shell-hooks.sh"
+        "templates/uv.toml.template"
+    )
+    
+    # 检测可用的下载工具
+    local download_cmd=""
+    if command -v curl &> /dev/null; then
+        download_cmd="curl"
+    elif command -v wget &> /dev/null; then
+        download_cmd="wget"
+    else
+        print_error "Neither curl nor wget is available. Please install one of them first."
+        return 1
+    fi
+    
+    # 下载每个文件
+    for file in "${files[@]}"; do
+        local url="${base_url}/${file}"
+        local output="${dest}/${file}"
+        
+        print_info "  Downloading ${file}..."
+        
+        if [ "$download_cmd" = "curl" ]; then
+            if ! curl -fsSL "$url" -o "$output"; then
+                print_error "Failed to download ${file}"
+                return 1
+            fi
+        else
+            if ! wget -qO "$output" "$url"; then
+                print_error "Failed to download ${file}"
+                return 1
+            fi
+        fi
+    done
+    
+    print_success "All files downloaded successfully"
+    return 0
+}
+
 # 显示安装后说明
 show_post_install() {
     local enable_auto_activation="${1:-y}"
@@ -470,6 +531,35 @@ interactive_setup() {
 
 # 主安装流程
 main() {
+    # 检测执行模式 (本地 vs 远程)
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+    local temp_dir=""
+    local is_remote_install=false
+    
+    # 如果 bin 目录不存在,说明是远程执行
+    if [ ! -d "${script_dir}/bin" ]; then
+        is_remote_install=true
+        print_info "Remote installation mode detected"
+        echo ""
+        
+        # 创建临时目录
+        temp_dir=$(mktemp -d)
+        
+        # 设置清理陷阱
+        trap 'rm -rf "$temp_dir"' EXIT
+        
+        # 下载文件
+        if ! download_uvm_files "$temp_dir"; then
+            print_error "Failed to download uvm files from GitHub"
+            print_info "Please check your internet connection and try again"
+            exit 1
+        fi
+        
+        # 更新 script_dir 指向临时目录
+        script_dir="$temp_dir"
+        echo ""
+    fi
+    
     # 解析命令行参数
     local custom_envs_dir=""
     local non_interactive=false
@@ -487,7 +577,7 @@ main() {
                 ;;
             --help|-h)
                 cat <<EOF
-UVM Installer v1.0.0
+UVM Installer v1.0.1
 
 Usage: ./install.sh [OPTIONS]
 
@@ -537,7 +627,7 @@ EOF
     
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║                  UVM Installer v1.0.0                      ║"
+    echo "║                  UVM Installer v1.0.1                      ║"
     echo "║          UV Manager - Conda-like Environment Manager       ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
@@ -575,8 +665,8 @@ EOF
     
     echo ""
     
-    # 安装 UVM
-    install_uvm || {
+    # 安装 UVM (传入 script_dir)
+    install_uvm "$script_dir" || {
         print_error "Failed to install uvm"
         exit 1
     }

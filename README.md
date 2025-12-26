@@ -38,58 +38,69 @@ Simplify Python virtual environment management with UV's blazing-fast performanc
 
 ## 🚀 Installation
 
-### Interactive Installation (Recommended for First-Time Users)
+### One-Command Installation (Recommended)
 
-The installer features a **step-by-step wizard** that guides you through configuration:
+Install uvm directly without cloning the repository:
 
-#### Linux / macOS
+**Linux / macOS:**
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/uvm.git
-cd uvm
-
-# Run the interactive installer
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
 ```
 
-**The wizard will ask you:**
-1. **📁 Environment Directory** (default: `~/uv_envs`)
-   - Press Enter to use default
-   - Type `n` to enter custom path
-   - Or directly type your custom path
+**Or using wget:**
 
-2. **🔧 Install UV?** (if not already installed)
-   - Automatically installs UV on Linux/macOS
+```bash
+wget -qO- https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
+```
 
-3. **🐚 Enable auto-activation?** (default: Yes)
-   - Auto-activate when entering directories with `.venv` or `.uvmrc`
-
-#### Windows (Git Bash)
+**Windows (Git Bash):**
 
 ```bash
 # 1. First, install UV in PowerShell (one-time setup)
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# 2. Then, run the interactive installer in Git Bash
+# 2. Then install uvm in Git Bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash
+```
+
+The installer features an **interactive wizard** that guides you through:
+- **📁 Environment Directory** (default: `~/uv_envs`)
+- **🔧 UV Installation** (if not already installed)
+- **🐚 Auto-activation** (optional but recommended)
+
+### Installation Options
+
+**Non-interactive installation:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash -s -- -y
+```
+
+**Custom environment directory:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/main/install.sh | bash -s -- --envs-dir /custom/path
+```
+
+**Install from specific version:**
+
+```bash
+# Install from a specific tag
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/v1.0.1/install.sh | bash
+
+# Install from development branch
+curl -fsSL https://raw.githubusercontent.com/yourusername/uvm/dev/install.sh | bash
+```
+
+### Manual Installation (For Development)
+
+If you want to modify uvm or contribute:
+
+```bash
 git clone https://github.com/yourusername/uvm.git
 cd uvm
 ./install.sh
-```
-
-### Non-Interactive Installation
-
-For automated setups or if you prefer defaults:
-
-```bash
-# Quick install with all defaults
-./install.sh -y
-
-# Install with custom environment directory
-./install.sh --envs-dir /mnt/data/python-envs
-
-# See all options
-./install.sh --help
 ```
 
 ### Post-Installation

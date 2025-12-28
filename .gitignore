@@ -23,3 +23,5 @@ test_envs/
 .test/
 
 .history/
+.specify/
+.claude/

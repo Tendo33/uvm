@@ -1,7 +1,7 @@
 # UVM Project Documentation
 
 **Project Name**: uvm - UV Manager  
-**Version**: 1.0.1  
+**Version**: 1.0.2  
 **Date**: 2025-12-26  
 **Status**: ✅ Completed
 

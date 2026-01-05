@@ -23,7 +23,7 @@
   - 自定义环境目录路径被 UV 版本信息覆盖
   - 添加正确的输出重定向（`>&2`）防止 stdout 污染
   - 影响：UV 已安装 + 自定义目录的交互式安装
-  - 详见 [BUGFIX_CONFIG.md](BUGFIX_CONFIG.md) 的详细分析
+  - 详细分析见 install.sh 中的注释
 
 ### 新增
 - **一键远程安装**：通过 curl/wget 无需克隆仓库即可安装
@@ -31,7 +31,7 @@
 - 卸载脚本（`uninstall.sh`）支持交互和强制模式
 - 完整的卸载文档（[UNINSTALL.md](project_document/UNINSTALL.md)）
 - 卸载时自动备份 Shell 配置
-- Bug 修复文档（[BUGFIX_CONFIG.md](BUGFIX_CONFIG.md)）
+- 在 install.sh 中添加了 Bug 修复注释
 
 ### 变更
 - 简化交互式安装提示，改善用户体验

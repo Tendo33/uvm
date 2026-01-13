@@ -1,61 +1,61 @@
-# uvm - UV 环境管理器
+# uvm - UV Environment Manager
 
 <div align="center">
 
-**类似 Conda 的 UV 环境管理工具**
+**Conda-like UV Environment Management Tool**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Shell](https://img.shields.io/badge/Shell-Bash-green.svg)](https://www.gnu.org/software/bash/)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue.svg)](https://github.com/Tendo33/uvm)
 
-使用 UV 的超快性能和 Conda 风格的直观命令，简化 Python 虚拟环境管理。
+Simplify Python virtual environment management with the ultra-fast performance of UV and intuitive Conda-style commands.
 
-[功能特性](#-功能特性) • [安装](#-安装) • [快速开始](#-快速开始) • [使用方法](#-使用方法) • [自动激活](#-自动激活) • [故障排除](#-故障排除) • [卸载](#-卸载)
+[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Usage](#-usage) • [Auto Activation](#-auto-activation) • [Troubleshooting](#-troubleshooting) • [Uninstall](#-uninstall)
 
 </div>
 
 ---
 
-## 🌟 功能特性
+## 🌟 Features
 
-- **🚀 Conda 风格命令**：熟悉的 `create`、`activate`、`deactivate`、`delete`、`list` 命令
-- **⚡ UV 驱动**：利用 UV 的 10-100 倍更快的包安装速度
-- **🔄 智能自动激活**：进入项目目录时自动激活环境
-- **🌏 国内镜像**：预配置清华大学镜像源，下载更快
-- **🎯 双模式支持**：
-  - **本地 `.venv`**：自动检测项目本地环境
-  - **共享环境**：在 `~/uv_envs/` 集中管理环境
-- **🖥️ 跨平台**：支持 Linux、macOS 和 Windows（Git Bash）
-
----
-
-## 📋 前置要求
-
-- **Bash**（或 Zsh）
-- **UV**（如未安装，安装时会提示安装）
+- **🚀 Conda-style Commands**: Familiar `create`, `activate`, `deactivate`, `delete`, `list` commands
+- **⚡ UV Powered**: Leverage UV's 10-100x faster package installation speed
+- **🔄 Smart Auto-activation**: Automatically activates the environment when entering a project directory
+- **🌏 Mirror Configuration**: Pre-configured mirrors (e.g., Tsinghua) for faster downloads in some regions
+- **🎯 Dual Mode Support**:
+  - **Local `.venv`**: Automatically detects project local environments
+  - **Shared Environments**: Centralized management in `~/uv_envs/`
+- **🖥️ Cross-platform**: Supports Linux, macOS, and Windows (Git Bash)
 
 ---
 
-## 🚀 安装
+## 📋 Prerequisites
 
-### 推荐方式：先下载后执行
+- **Bash** (or Zsh)
+- **UV** (If not installed, the installer will prompt to install it)
 
-为了交互式安装能正常工作（可以自定义选项），请先下载脚本再执行：
+---
 
-**Linux / macOS：**
+## 🚀 Installation
+
+### Recommended: Download then Execute
+
+To ensure the interactive installation works correctly (allowing customization), please download the script before executing it:
+
+**Linux / macOS:**
 
 ```bash
-# 下载安装脚本
+# Download installation script
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh -o install.sh
 
-# 执行安装（交互式向导）
+# Execute installation (Interactive Wizard)
 bash install.sh
 
-# 安装完成后可删除脚本
+# Remove script after installation
 rm install.sh
 ```
 
-**使用 wget：**
+**Using wget:**
 
 ```bash
 wget -qO install.sh https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh
@@ -63,54 +63,54 @@ bash install.sh
 rm install.sh
 ```
 
-**Windows（Git Bash）：**
+**Windows (Git Bash):**
 
 ```bash
-# 1. 首先在 PowerShell 中安装 UV（仅需一次）
+# 1. Install UV in PowerShell first (Only needs to be done once)
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# 2. 在 Git Bash 中下载并执行安装脚本
+# 2. Download and execute installation script in Git Bash
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh -o install.sh
 bash install.sh
 rm install.sh
 ```
 
-安装向导会引导您完成：
-- **📁 环境目录**（默认：`~/uv_envs`）
-- **🔧 UV 安装**（如未安装会自动安装）
-- **🐚 自动激活**（可选但推荐）
+The installation wizard will guide you through:
+- **📁 Environment Directory** (Default: `~/uv_envs`)
+- **🔧 UV Installation** (Will install automatically if missing)
+- **🐚 Auto-activation** (Optional but recommended)
 
-### 安装选项
+### Installation Options
 
-**非交互式安装（使用默认配置）：**
+**Non-interactive Installation (Use defaults):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh -o install.sh
 bash install.sh -y
 ```
 
-**自定义环境目录：**
+**Custom Environment Directory:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh -o install.sh
 bash install.sh --envs-dir /custom/path
 ```
 
-**安装特定版本：**
+**Install Specific Version:**
 
 ```bash
-# 安装特定标签版本
+# Install specific tag version
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/v1.0.1/install.sh -o install.sh
 bash install.sh
 
-# 安装开发分支
+# Install development branch
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/dev/install.sh -o install.sh
 bash install.sh
 ```
 
-### 开发者安装（手动方式）
+### Developer Installation (Manual)
 
-如果您想修改 uvm 或贡献代码：
+If you want to modify uvm or contribute:
 
 ```bash
 git clone https://github.com/Tendo33/uvm.git
@@ -118,15 +118,15 @@ cd uvm
 ./install.sh
 ```
 
-### 安装后配置
+### Post-installation Configuration
 
-重新加载 Shell 配置：
+Reload Shell configuration:
 
 ```bash
-source ~/.bashrc  # Zsh 用户使用 ~/.zshrc
+source ~/.bashrc  # Zsh users use ~/.zshrc
 ```
 
-**启用自动激活**（可选但推荐）：
+**Enable Auto-activation** (Optional but recommended):
 
 ```bash
 echo 'eval "$(uvm shell-hook)"' >> ~/.bashrc
@@ -135,166 +135,166 @@ source ~/.bashrc
 
 ---
 
-## 🎯 快速开始
+## 🎯 Quick Start
 
 ```bash
-# 创建 Python 3.11 环境
+# Create a Python 3.11 environment
 uvm create myenv --python 3.11
 
-# 激活环境
+# Activate environment
 uvm activate myenv
 
-# 安装包（使用 UV 的速度）
+# Install packages (Using UV speed)
 pip install requests numpy pandas
 
-# 列出所有环境
+# List all environments
 uvm list
 
-# 停用环境
+# Deactivate environment
 uvm deactivate
 
-# 删除环境
+# Delete environment
 uvm delete myenv
 ```
 
 ---
 
-## 📖 使用方法
+## 📖 Usage
 
-### 基本命令
+### Basic Commands
 
-#### 创建环境
+#### Create Environment
 
 ```bash
-# 使用默认 Python 创建
+# Create using default Python
 uvm create myenv
 
-# 使用指定 Python 版本创建
+# Create using specific Python version
 uvm create myenv --python 3.11
 
-# 在自定义位置创建
+# Create in custom location
 uvm create myenv --path /custom/path
 ```
 
-#### 激活环境
+#### Activate Environment
 
 ```bash
 uvm activate myenv
 ```
 
-> **注意**：需要 Shell 集成。请先运行 `eval "$(uvm shell-hook)"`。
+> **Note**: Requires Shell integration. Please run `eval "$(uvm shell-hook)"` first.
 
-#### 停用环境
+#### Deactivate Environment
 
 ```bash
 uvm deactivate
 ```
 
-#### 列出环境
+#### List Environments
 
 ```bash
-# 列出所有环境
+# List all environments
 uvm list
 
-# 输出示例：
+# Output example:
 #   myenv                     Python 3.11.5      /home/user/uv_envs/myenv
 # * active-env                Python 3.12.0      /home/user/uv_envs/active-env
 ```
 
-`*` 表示当前激活的环境。
+`*` indicates the currently active environment.
 
-#### 删除环境
+#### Delete Environment
 
 ```bash
-# 确认后删除
+# Delete after confirmation
 uvm delete myenv
 
-# 强制删除（跳过确认）
+# Force delete (Skip confirmation)
 uvm delete myenv --force
 ```
 
 ---
 
-## 🔄 自动激活
+## 🔄 Auto Activation
 
-uvm 支持**智能自动激活**，有两个优先级：
+uvm supports **Smart Auto-activation** with two priorities:
 
-### 优先级 1：本地 `.venv`（最高）
+### Priority 1: Local `.venv` (Highest)
 
-自动检测并激活项目本地的 `.venv` 目录：
+Automatically detects and activates the project's local `.venv` directory:
 
 ```bash
-# 在项目中
+# In project
 cd ~/my-project
-uv venv  # 或 uv sync
+uv venv  # or uv sync
 
-# 进入目录 → 自动激活
+# Enter directory -> Auto activate
 cd ~/my-project
 # 🔄 Auto-activating local .venv
 
-# 离开目录 → 自动停用
+# Leave directory -> Auto deactivate
 cd ~
 # 🔻 Deactivating environment (left project directory)
 ```
 
-**使用场景**：使用 `pyproject.toml` 的现代项目，独立项目环境。
+**Scenario**: Modern projects using `pyproject.toml`, standalone project environments.
 
-### 优先级 2：通过 `.uvmrc` 使用共享环境
+### Priority 2: Shared Environment via `.uvmrc`
 
-为使用 `requirements.txt` 的项目指定共享环境：
+Specify a shared environment for projects using `requirements.txt`:
 
 ```bash
-# 创建共享测试环境
+# Create shared test environment
 uvm create test-env --python 3.11
 
-# 在老项目中
+# In legacy project
 cd ~/legacy-project
 echo "test-env" > .uvmrc
 
-# 进入目录 → 自动激活
+# Enter directory -> Auto activate
 cd ~/legacy-project
 # 🔄 Auto-activating uvm environment: test-env
 ```
 
-**使用场景**：多项目共享同一环境、测试环境、学习环境。
+**Scenario**: Multiple projects sharing the same environment, test environments, learning environments.
 
-### 对比表
+### Comparison Table
 
-| 场景 | 环境位置 | 激活方式 | 使用场景 |
-|------|----------|----------|----------|
-| 本地环境 | `./venv` | 自动检测 | 独立项目，`pyproject.toml` 项目 |
-| 共享环境 | `~/uv_envs/myenv` | `.uvmrc` 文件 | 多项目共享，测试环境 |
-| 手动激活 | `~/uv_envs/myenv` | `uvm activate myenv` | 临时使用，快速测试 |
+| Scenario | Environment Location | Activation Method | Use Case |
+|----------|----------------------|-------------------|----------|
+| Local Environment | `./venv` | Auto Detection | Standalone projects, `pyproject.toml` projects |
+| Shared Environment | `~/uv_envs/myenv` | `.uvmrc` file | Multi-project sharing, test environments |
+| Manual Activation | `~/uv_envs/myenv` | `uvm activate myenv` | Temporary use, quick testing |
 
 ---
 
-## ⚙️ 配置
+## ⚙️ Configuration
 
-### 配置文件
+### Configuration Files
 
-- **uvm 配置**：`~/.config/uvm/`
-  - `envs.json`：环境元数据
-- **UV 配置**：`~/.config/uv/uv.toml`
-  - PyPI 镜像：`https://pypi.tuna.tsinghua.edu.cn/simple`
-  - Python 下载：`https://mirrors.tuna.tsinghua.edu.cn/python-releases/`
+- **uvm Config**: `~/.config/uvm/`
+  - `envs.json`: Environment metadata
+- **UV Config**: `~/.config/uv/uv.toml`
+  - PyPI Mirror: `https://pypi.tuna.tsinghua.edu.cn/simple`
+  - Python Downloads: `https://mirrors.tuna.tsinghua.edu.cn/python-releases/`
 
-### 环境变量
+### Environment Variables
 
 ```bash
-# 自定义环境目录（默认：~/uv_envs）
+# Custom environment directory (Default: ~/uv_envs)
 export UVM_ENVS_DIR="${HOME}/my-custom-envs"
 
-# 自定义配置目录（默认：~/.config/uvm）
+# Custom config directory (Default: ~/.config/uvm)
 export UVM_HOME="${HOME}/.uvm"
 ```
 
-### 重新配置镜像
+### Reconfigure Mirror
 
 ```bash
 uvm config mirror
 ```
 
-### 查看当前配置
+### Show Current Configuration
 
 ```bash
 uvm config show
@@ -302,48 +302,48 @@ uvm config show
 
 ---
 
-## 🛠️ 故障排除
+## 🛠️ Troubleshooting
 
 ### `uvm: command not found`
 
-**解决方法**：确保 `~/.local/bin` 在 PATH 中：
+**Solution**: Ensure `~/.local/bin` is in your PATH:
 
 ```bash
 echo 'export PATH="${HOME}/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### `uvm activate` 不工作
+### `uvm activate` not working
 
-**解决方法**：启用 Shell 集成：
+**Solution**: Enable Shell integration:
 
 ```bash
 echo 'eval "$(uvm shell-hook)"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 自动激活不工作
+### Auto-activation not working
 
-**检查清单**：
-1. ✅ Shell hook 已启用：`~/.bashrc` 中有 `eval "$(uvm shell-hook)"`
-2. ✅ Shell 已重新加载：`source ~/.bashrc`
-3. ✅ `.uvmrc` 文件包含有效的环境名称
-4. ✅ `.venv` 目录存在且包含 `bin/activate` 脚本
+**Checklist**:
+1. ✅ Shell hook enabled: `~/.bashrc` contains `eval "$(uvm shell-hook)"`
+2. ✅ Shell reloaded: `source ~/.bashrc`
+3. ✅ `.uvmrc` file contains valid environment name
+4. ✅ `.venv` directory exists and contains `bin/activate` script
 
-### 包下载慢
+### Slow Package Download
 
-**解决方法**：验证镜像配置：
+**Solution**: Verify mirror configuration:
 
 ```bash
 cat ~/.config/uv/uv.toml
 
-# 应该包含：
+# Should contain:
 # [[index]]
 # url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 # default = true
 ```
 
-如果没有，运行：
+If not, run:
 
 ```bash
 uvm config mirror
@@ -351,176 +351,176 @@ uvm config mirror
 
 ---
 
-## 🤝 与其他工具对比
+## 🤝 Comparison with Other Tools
 
-| 功能 | uvm | Conda | venv + pip |
-|------|-----|-------|------------|
-| 速度 | ⚡⚡⚡ (UV) | 🐌 | 🐌🐌 |
-| 自动激活 | ✅ | ❌ | ❌ |
-| 国内镜像 | ✅ (内置) | ⚙️ (手动) | ⚙️ (手动) |
-| Python 版本管理 | ✅ | ✅ | ❌ |
-| 磁盘空间 | 💾 (小) | 💾💾💾 (大) | 💾 (小) |
-| 学习曲线 | 📚 (简单) | 📚📚 (中等) | 📚 (简单) |
+| Feature | uvm | Conda | venv + pip |
+|---------|-----|-------|------------|
+| Speed | ⚡⚡⚡ (UV) | 🐌 | 🐌🐌 |
+| Auto Activation | ✅ | ❌ | ❌ |
+| Mirrors | ✅ (Built-in) | ⚙️ (Manual) | ⚙️ (Manual) |
+| Python Version Mgmt | ✅ | ✅ | ❌ |
+| Disk Space | 💾 (Small) | 💾💾💾 (Large) | 💾 (Small) |
+| Learning Curve | 📚 (Easy) | 📚📚 (Medium) | 📚 (Easy) |
 
 ---
 
-## 📚 高级用法
+## 📚 Advanced Usage
 
-### 自定义环境位置
+### Custom Environment Location
 
 ```bash
-# 在指定路径创建环境
+# Create environment in specific path
 uvm create myenv --path /mnt/data/envs/myenv
 
-# 环境仍会被 uvm 追踪
-uvm list  # 显示自定义路径
+# Environment still tracked by uvm
+uvm list  # Shows custom path
 ```
 
-### 多 Python 版本
+### Multiple Python Versions
 
 ```bash
-# 创建不同 Python 版本的环境
+# Create environments with different Python versions
 uvm create py38 --python 3.8
 uvm create py311 --python 3.11
 uvm create py312 --python 3.12
 
-# 轻松切换
+# Easy switch
 uvm activate py311
 ```
 
-### 项目专属环境
+### Project Specific Environments
 
-**方式 1：本地 `.venv`（推荐用于现代项目）**
+**Method 1: Local `.venv` (Recommended for modern projects)**
 
 ```bash
 cd ~/my-project
 uv venv
 uv pip install -r requirements.txt
-# 进入目录时自动激活
+# Auto activates on directory entry
 ```
 
-**方式 2：使用 `.uvmrc` 的共享环境**
+**Method 2: Shared Environment via `.uvmrc`**
 
 ```bash
 cd ~/my-project
 uvm create my-project-env --python 3.11
 echo "my-project-env" > .uvmrc
-# 进入目录时自动激活
+# Auto activates on directory entry
 ```
 
 ---
 
-## 🔍 工作原理
+## 🔍 How it Works
 
 ```mermaid
 graph TD
-    A[cd 进入目录] --> B{检查 .venv}
-    B -->|找到| C[激活本地 .venv]
-    B -->|未找到| D{检查 .uvmrc}
-    D -->|找到| E[读取环境名]
-    E --> F[激活共享环境]
-    D -->|未找到| G{之前是自动激活的？}
-    G -->|是| H[停用环境]
-    G -->|否| I[不执行操作]
+    A[cd into directory] --> B{Check .venv}
+    B -->|Found| C[Activate local .venv]
+    B -->|Not Found| D{Check .uvmrc}
+    D -->|Found| E[Read env name]
+    E --> F[Activate shared env]
+    D -->|Not Found| G{Was auto-activated?}
+    G -->|Yes| H[Deactivate env]
+    G -->|No| I[Do nothing]
 ```
 
 ---
 
-## 🐛 已知问题
+## 🐛 Known Issues
 
-- **Windows**：
-  - ✅ **uvm 在 Git Bash 中完全正常工作**
-  - ❌ 不支持 PowerShell/CMD（请使用 Git Bash）
-  - ℹ️ UV 必须先手动安装（见安装说明）
-- **Shell 集成**：必须运行 `eval "$(uvm shell-hook)"` 才能使用 `activate`/`deactivate`。
-
----
-
-## 🗺️ 路线图
-
-- [ ] 支持 `pyenv` 集成
-- [ ] 环境导出/导入（`uvm export`、`uvm import`）
-- [ ] 环境克隆（`uvm clone`）
-- [ ] Shell 补全（Bash/Zsh）
-- [ ] Fish shell 支持
+- **Windows**:
+  - ✅ **uvm works perfectly in Git Bash**
+  - ❌ PowerShell/CMD not supported (Please use Git Bash)
+  - ℹ️ UV must be installed manually first (See installation instructions)
+- **Shell Integration**: Must run `eval "$(uvm shell-hook)"` to use `activate`/`deactivate`.
 
 ---
 
-## 📄 许可证
+## 🗺️ Roadmap
 
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
-
----
-
-## 🙏 致谢
-
-- [astral-sh/uv](https://github.com/astral-sh/uv) - 超快的 Python 包安装器
-- [uv-custom](https://github.com/Wangnov/uv-custom) - 国内镜像配置灵感
-- [Conda](https://docs.conda.io/) - 命令设计灵感
+- [ ] Support `pyenv` integration
+- [ ] Environment Export/Import (`uvm export`, `uvm import`)
+- [ ] Environment Clone (`uvm clone`)
+- [ ] Shell Completion (Bash/Zsh)
+- [ ] Fish shell support
 
 ---
 
-## 🗑️ 卸载
+## 📄 License
 
-### 推荐方式：先下载后执行
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-为了交互式卸载能正常工作，请先下载脚本再执行：
+---
+
+## 🙏 Acknowledgements
+
+- [astral-sh/uv](https://github.com/astral-sh/uv) - Ultra-fast Python package installer
+- [uv-custom](https://github.com/Wangnov/uv-custom) - Inspiration for mirror configuration
+- [Conda](https://docs.conda.io/) - Inspiration for command design
+
+---
+
+## 🗑️ Uninstall
+
+### Recommended: Download then Execute
+
+To ensure interactive uninstall works correctly, please download the script first:
 
 ```bash
-# 下载卸载脚本
+# Download uninstall script
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/uninstall.sh -o uninstall.sh
 
-# 执行卸载（交互式确认）
+# Execute uninstall (Interactive confirm)
 bash uninstall.sh
 
-# 卸载完成后删除脚本
+# Remove script after uninstall
 rm uninstall.sh
 ```
 
-### 卸载选项
+### Uninstall Options
 
 ```bash
-# 强制卸载（跳过确认）
+# Force uninstall (Skip confirmation)
 bash uninstall.sh --force
 
-# 保留 Shell 配置
+# Keep Shell config
 bash uninstall.sh --keep-shell-config
 ```
 
-### 手动卸载
+### Manual Uninstall
 
-如果已克隆仓库：
+If you cloned the repository:
 
 ```bash
 cd /path/to/uvm
 ./uninstall.sh
 ```
 
-**会被删除的内容：**
-- UVM 二进制文件和库文件
-- 配置文件
-- Shell 集成
+**What will be deleted:**
+- UVM binaries and libraries
+- Configuration files
+- Shell integration
 
-**会保留的内容：**
-- 您的虚拟环境（`~/uv_envs`）
-- UV 本身
-- UV 配置（`~/.config/uv/uv.toml`）
+**What will be kept:**
+- Your virtual environments (`~/uv_envs`)
+- UV itself
+- UV config (`~/.config/uv/uv.toml`)
 
-📖 **详细指南：** [UNINSTALL.md](project_document/UNINSTALL.md)
+📖 **Detailed Guide:** [UNINSTALL.md](project_document/UNINSTALL.md)
 
 ---
 
-## 📞 支持
+## 📞 Support
 
-- **问题反馈**：[GitHub Issues](https://github.com/Tendo33/uvm/issues)
-- **讨论交流**：[GitHub Discussions](https://github.com/Tendo33/uvm/discussions)
+- **Issues**: [GitHub Issues](https://github.com/Tendo33/uvm/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Tendo33/uvm/discussions)
 
 ---
 
 <div align="center">
 
-**为追求速度和简洁的 Python 开发者用 ❤️ 打造**
+**Built with ❤️ for Python developers who value speed and simplicity**
 
-⭐ 如果觉得有用请给个 Star！
+⭐ Give it a Star if you find it useful!
 
 </div>

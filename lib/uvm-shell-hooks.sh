@@ -4,9 +4,10 @@
 uvm_auto_activate() {
     local uvm_envs_dir="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
     
-    # 优先级 1: 检查项目本地 .venv（向上查找到根目录）
+    # 优先级 1: 检查项目本地 .venv（向上查找，最多 5 层）
     local current_dir="$PWD"
-    while [ "$current_dir" != "/" ] && [ "$current_dir" != "" ]; do
+    local _uvm_depth=0
+    while [ "$current_dir" != "/" ] && [ "$current_dir" != "" ] && [ "$_uvm_depth" -lt 5 ]; do
         if [ -d "$current_dir/.venv" ]; then
             local activate_script=""
             if [ -f "$current_dir/.venv/bin/activate" ]; then
@@ -34,12 +35,19 @@ uvm_auto_activate() {
         fi
         
         # 向上一级目录
+        _uvm_depth=$((_uvm_depth + 1))
         current_dir=$(dirname "$current_dir")
     done
     
     # 优先级 2: 检查 .uvmrc（共享环境）
     if [ -f ".uvmrc" ]; then
         local env_name=$(cat .uvmrc | tr -d '[:space:]' | head -n 1)
+        
+        # 安全校验：只允许字母、数字、下划线、连字符（防止路径穿越）
+        if [ -n "$env_name" ] && [[ ! "$env_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "⚠️  .uvmrc 中包含非法环境名称，已跳过自动激活: '$env_name'"
+            return 0
+        fi
         
         if [ -n "$env_name" ]; then
             local env_path="$uvm_envs_dir/$env_name"
@@ -126,9 +134,10 @@ export UVM_ENVS_DIR="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
 uvm_auto_activate() {
     local uvm_envs_dir="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
     
-    # Priority 1: Check for local .venv
+    # Priority 1: Check for local .venv (search up to 5 levels)
     local current_dir="$PWD"
-    while [ "$current_dir" != "/" ] && [ "$current_dir" != "" ]; do
+    local _uvm_depth=0
+    while [ "$current_dir" != "/" ] && [ "$current_dir" != "" ] && [ "$_uvm_depth" -lt 5 ]; do
         if [ -d "$current_dir/.venv" ]; then
             local activate_script=""
             if [ -f "$current_dir/.venv/bin/activate" ]; then
@@ -149,12 +158,19 @@ uvm_auto_activate() {
                 return 0
             fi
         fi
+        _uvm_depth=$((_uvm_depth + 1))
         current_dir=$(dirname "$current_dir")
     done
     
     # Priority 2: Check for .uvmrc
     if [ -f ".uvmrc" ]; then
         local env_name=$(cat .uvmrc | tr -d '[:space:]' | head -n 1)
+        
+        # Security: only allow valid env names (letters, digits, underscore, hyphen)
+        if [ -n "$env_name" ] && [[ ! "$env_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "Warning: Invalid environment name in .uvmrc, skipping auto-activation: '$env_name'"
+            return 0
+        fi
         
         if [ -n "$env_name" ]; then
             local env_path="$uvm_envs_dir/$env_name"

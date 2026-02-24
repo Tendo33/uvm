@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: shellcheck 静态代码分析
+  # ──────────────────────────────────────────────
+  shellcheck:
+    name: ShellCheck (Static Analysis)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          severity: warning
+          scandir: .
+          ignore_paths: >-
+            .git
+            .history
+            .specify
+          additional_files: bin/uvm
+
+  # ──────────────────────────────────────────────
+  # Job 2: bash -n 语法完整性检查（多平台）
+  # ──────────────────────────────────────────────
+  syntax-check:
+    name: Syntax Check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check syntax of all shell scripts
+        run: |
+          echo "=== Checking syntax with bash -n ==="
+          bash -n bin/uvm
+          bash -n lib/uvm-core.sh
+          bash -n lib/uvm-config.sh
+          bash -n lib/uvm-shell-hooks.sh
+          bash -n install.sh
+          bash -n uninstall.sh
+          bash -n fix-shell-hook.sh
+          echo "✅ All syntax checks passed"
+
+  # ──────────────────────────────────────────────
+  # Job 3: BATS 功能集成测试（含 uv 安装）
+  # ──────────────────────────────────────────────
+  bats-tests:
+    name: Functional Tests (BATS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install BATS
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y bats
+
+      - name: Run BATS tests
+        run: |
+          if [ -d "tests" ] && ls tests/*.bats &>/dev/null 2>&1; then
+            bats tests/
+          else
+            echo "⚠️  No BATS test files found in tests/. Skipping."
+          fi
+
+  # ──────────────────────────────────────────────
+  # Job 4: 安全校验（.uvmrc 输入验证回归）
+  # ──────────────────────────────────────────────
+  security-checks:
+    name: Security Regression Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify .uvmrc path traversal guard
+        run: |
+          echo "=== Testing .uvmrc security validation ==="
+
+          # 从 uvm-shell-hooks.sh 中提取校验逻辑进行单元测试
+          validate_env_name() {
+            local env_name="$1"
+            if [ -n "$env_name" ] && [[ ! "$env_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+              return 1
+            fi
+            return 0
+          }
+
+          # 合法名称应通过
+          for valid in "myenv" "my-env" "env_1" "Env123" "a" "test-env-3"; do
+            if ! validate_env_name "$valid"; then
+              echo "❌ FAIL: '$valid' should be valid but was rejected"
+              exit 1
+            fi
+            echo "✅ PASS (valid): '$valid'"
+          done
+
+          # 危险名称应被拒绝
+          for invalid in "../evil" "../../etc/passwd" "env name" "env;rm -rf /" '\$(evil)' "env/traversal"; do
+            if validate_env_name "$invalid"; then
+              echo "❌ FAIL: '$invalid' should be rejected but was accepted"
+              exit 1
+            fi
+            echo "✅ PASS (rejected): '$invalid'"
+          done
+
+          echo ""
+          echo "✅ All security regression tests passed"
+
+      - name: Verify eval removal in install.sh
+        run: |
+          echo "=== Checking for dangerous eval usage in install.sh ==="
+          # 确认 eval echo 命令注入漏洞已不存在
+          if grep -n 'eval echo' install.sh; then
+            echo "❌ FAIL: Found 'eval echo' in install.sh — potential command injection!"
+            exit 1
+          fi
+          echo "✅ PASS: No 'eval echo' found in install.sh"

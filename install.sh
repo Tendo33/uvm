@@ -468,12 +468,12 @@ interactive_setup() {
         if [[ "$choice" =~ ^[Nn]$ ]]; then
             read -p "Enter custom path: " custom_path
             if [ -n "$custom_path" ]; then
-                # 展开 ~ 和环境变量
-                envs_dir=$(eval echo "$custom_path")
+                # 安全展开 ~ 符号（使用 Bash 参数替换，避免 eval 命令注入）
+                envs_dir="${custom_path/#\~/$HOME}"
             fi
         # 如果不是 y/Y/n/N，当作路径处理
         elif [[ ! "$choice" =~ ^[Yy]$ ]]; then
-            envs_dir=$(eval echo "$choice")
+            envs_dir="${choice/#\~/$HOME}"
         fi
         # 如果是 y/Y，使用默认值（已设置）
     fi
@@ -577,7 +577,7 @@ main() {
                 ;;
             --help|-h)
                 cat <<EOF
-UVM Installer v1.0.1
+UVM Installer v1.0.3
 
 Usage: ./install.sh [OPTIONS]
 
@@ -627,7 +627,7 @@ EOF
     
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║                  UVM Installer v1.0.1                      ║"
+    echo "║                  UVM Installer v1.0.3                      ║"
     echo "║          UV Manager - Conda-like Environment Manager       ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""

@@ -5,6 +5,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.3] - 2026-02-24
+
+### 安全修复
+- **路径穿越防护**：`.uvmrc` 中的环境名称现在通过正则白名单 `^[a-zA-Z0-9_-]+$` 校验，拒绝包含 `../`、特殊字符等危险输入
+- **命令注入修复**：`install.sh` 中将 `eval echo "$path"` 替换为安全的 Bash 参数展开 `"${path/#\~/$HOME}"`，消除安装时的命令注入攻击面
+
+### 性能优化
+- **cd 钩子优化**：自动激活的 `.venv` 向上递归查找深度限制为最多 5 层，避免在深层目录结构中引起不必要的磁盘 IO 和延迟
+
+### 新增
+- **GitHub Actions CI**：新增 `.github/workflows/ci.yml`，包含 ShellCheck 静态分析、跨平台语法检查（Ubuntu + macOS）、BATS 功能测试、安全回归测试
+- **GitHub Actions Release**：新增 `.github/workflows/release.yml`，推送 `v*` tag 后自动验证版本一致性、打包并发布 GitHub Release
+- **BATS 测试套件**：新增 `tests/uvm.bats`，覆盖核心命令功能测试和安全回归用例
+
+---
+
 ## [1.0.2] - 2025-12-26
 
 ### 变更
@@ -102,6 +118,7 @@
 
 ---
 
+[1.0.3]: https://github.com/Tendo33/uvm/releases/tag/v1.0.3
 [1.0.2]: https://github.com/Tendo33/uvm/releases/tag/v1.0.2
 [1.0.1]: https://github.com/Tendo33/uvm/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Tendo33/uvm/releases/tag/v1.0.0

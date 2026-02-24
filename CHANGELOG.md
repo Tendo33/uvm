@@ -5,6 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.4] - 2026-02-24
+
+### 修复
+- **CI 质量**：修复所有 ShellCheck 静态分析警告（SC2155、SC2034、SC1090），CI 流水线恢复绿色
+  - SC2155：将 `local var=$(cmd)` 拆分为两步赋值，避免屏蔽命令返回值（共 26 处）
+  - SC2034：移除/重命名未使用变量 `is_remote_install`、`show_all`
+  - SC1090：为非常量路径的 `source` 添加 `# shellcheck source=/dev/null` 指令
+
+---
+
 ## [1.0.3] - 2026-02-24
 
 ### 安全修复
@@ -118,6 +128,7 @@
 
 ---
 
+[1.0.4]: https://github.com/Tendo33/uvm/releases/tag/v1.0.4
 [1.0.3]: https://github.com/Tendo33/uvm/releases/tag/v1.0.3
 [1.0.2]: https://github.com/Tendo33/uvm/releases/tag/v1.0.2
 [1.0.1]: https://github.com/Tendo33/uvm/releases/tag/v1.0.1

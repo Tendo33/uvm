@@ -101,16 +101,17 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
-          # 打包完整源码（不含 .git、.history 等）
+          # 打包完整源码（不含 .git、.history 等以及正在生成的归档文件）
           tar --exclude='.git' \
               --exclude='.history' \
               --exclude='.specify' \
               --exclude='.github' \
+              --exclude="uvm-${VERSION}.tar.gz" \
               -czf "uvm-${VERSION}.tar.gz" .
 
           # 同时提供 zip 格式
           zip -r "uvm-${VERSION}.zip" . \
-              -x '.git/*' -x '.history/*' -x '.specify/*' -x '.github/*'
+              -x '.git/*' -x '.history/*' -x '.specify/*' -x '.github/*' -x "uvm-*.tar.gz" -x "uvm-*.zip"
 
           echo "=== Release assets ==="
           ls -lh uvm-*.tar.gz uvm-*.zip

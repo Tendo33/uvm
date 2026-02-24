@@ -543,7 +543,6 @@ main() {
     
     # 如果 bin 目录不存在,说明是远程执行
     if [ ! -d "${script_dir}/bin" ]; then
-        is_remote_install=true
         print_info "Remote installation mode detected"
         echo ""
         
@@ -582,7 +581,7 @@ main() {
                 ;;
             --help|-h)
                 cat <<EOF
-UVM Installer v1.0.3
+UVM Installer v1.0.4
 
 Usage: ./install.sh [OPTIONS]
 
@@ -632,7 +631,7 @@ EOF
     
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║                  UVM Installer v1.0.3                      ║"
+    echo "║                  UVM Installer v1.0.4                      ║"
     echo "║          UV Manager - Conda-like Environment Manager       ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""

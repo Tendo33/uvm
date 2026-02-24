@@ -42,7 +42,7 @@ detect_shell_rc() {
 show_header() {
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║                  UVM Uninstaller v1.0.3                    ║"
+    echo "║                  UVM Uninstaller v1.0.4                    ║"
     echo "║          UV Manager - Conda-like Environment Manager       ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
@@ -235,7 +235,7 @@ main() {
                 ;;
             -h|--help)
                 cat <<EOF
-UVM Uninstaller v1.0.3
+UVM Uninstaller v1.0.4
 
 Usage: ./uninstall.sh [OPTIONS]
 

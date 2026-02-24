@@ -114,7 +114,8 @@ scan_and_register_envs() {
     # 扫描目录
     for env_dir in "${scan_dir}"/*; do
         if [ -d "$env_dir" ]; then
-            local env_name=$(basename "$env_dir")
+            local env_name
+            env_name=$(basename "$env_dir")
             
             # 跳过隐藏目录和特殊目录
             if [[ "$env_name" == .* ]] || [[ "$env_name" == "desktop.ini" ]]; then
@@ -128,7 +129,8 @@ scan_and_register_envs() {
             
             # 检查是否是有效的 UV 环境
             if is_valid_uv_env "$env_dir"; then
-                local python_version=$(get_env_python_version "$env_dir")
+                local python_version
+                python_version=$(get_env_python_version "$env_dir")
                 
                 # 注册环境
                 add_env_record "$env_name" "$env_dir" "$python_version"
@@ -173,7 +175,8 @@ add_env_record() {
     # 追加到文件（简单实现，不做去重）
     if [ -f "${uvm_envs_file}" ]; then
         # 读取现有内容，去除结尾的 ]，添加新记录
-        local content=$(cat "${uvm_envs_file}")
+        local content
+        content=$(cat "${uvm_envs_file}")
         if [ "$content" = "[]" ]; then
             echo "[${record}]" > "${uvm_envs_file}"
         else
@@ -193,7 +196,8 @@ remove_env_record() {
     fi
     
     # 使用临时文件过滤（简单实现）
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
     grep -v "\"name\":\"${env_name}\"" "${uvm_envs_file}" > "${temp_file}" || true
     mv "${temp_file}" "${uvm_envs_file}"
 }
@@ -215,7 +219,8 @@ get_env_path() {
     local uvm_envs_file="${HOME}/.config/uvm/envs.json"
     if [ -f "${uvm_envs_file}" ]; then
         # 简单的 grep 提取（生产环境应使用 jq）
-        local path=$(grep -o "\"name\":\"${env_name}\"[^}]*\"path\":\"[^\"]*\"" "${uvm_envs_file}" | grep -o "\"path\":\"[^\"]*\"" | cut -d'"' -f4)
+        local path
+        path=$(grep -o "\"name\":\"${env_name}\"[^}]*\"path\":\"[^\"]*\"" "${uvm_envs_file}" | grep -o "\"path\":\"[^\"]*\"" | cut -d'"' -f4)
         if [ -n "$path" ] && [ -d "$path" ]; then
             echo "$path"
             return 0
@@ -238,7 +243,8 @@ detect_shell() {
 
 # 获取 Shell 配置文件路径
 get_shell_rc_file() {
-    local shell_type=$(detect_shell)
+    local shell_type
+    shell_type=$(detect_shell)
     
     case "$shell_type" in
         bash)

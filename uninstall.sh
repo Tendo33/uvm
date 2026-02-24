@@ -70,7 +70,8 @@ show_removal_plan() {
         items_to_remove+=("  ✓ Config: $HOME/.config/uvm")
     fi
     
-    local shell_rc=$(detect_shell_rc)
+    local shell_rc
+    shell_rc=$(detect_shell_rc)
     if [ -f "$shell_rc" ] && grep -q "uvm" "$shell_rc" 2>/dev/null; then
         items_to_remove+=("  ✓ Shell integration from: $shell_rc")
     fi
@@ -92,7 +93,8 @@ show_removal_plan() {
     # 显示环境目录位置
     local envs_dir="$HOME/uv_envs"
     if [ -f "$HOME/.config/uvm/config" ]; then
-        local configured_dir=$(grep "UVM_ENVS_DIR=" "$HOME/.config/uvm/config" 2>/dev/null | cut -d'"' -f2)
+        local configured_dir
+        configured_dir=$(grep "UVM_ENVS_DIR=" "$HOME/.config/uvm/config" 2>/dev/null | cut -d'"' -f2)
         if [ -n "$configured_dir" ]; then
             envs_dir="$configured_dir"
         fi
@@ -109,7 +111,8 @@ show_removal_plan() {
 # 备份 Shell RC 文件
 backup_shell_rc() {
     local shell_rc="$1"
-    local backup_file="${shell_rc}.uvm-backup-$(date +%Y%m%d-%H%M%S)"
+    local backup_file
+    backup_file="${shell_rc}.uvm-backup-$(date +%Y%m%d-%H%M%S)"
     
     if [ -f "$shell_rc" ]; then
         cp "$shell_rc" "$backup_file"
@@ -134,7 +137,8 @@ remove_from_shell_rc() {
     print_info "Removing uvm from: $shell_rc"
     
     # 创建临时文件
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
     
     # 移除包含 uvm 的行
     grep -v "uvm" "$shell_rc" > "$temp_file" || true
@@ -294,7 +298,8 @@ EOF
     # 备份并移除 Shell 配置
     local backup_file=""
     if [ "$keep_shell_config" = false ]; then
-        local shell_rc=$(detect_shell_rc)
+        local shell_rc
+        shell_rc=$(detect_shell_rc)
         backup_file=$(backup_shell_rc "$shell_rc")
         remove_from_shell_rc "$shell_rc"
         echo ""

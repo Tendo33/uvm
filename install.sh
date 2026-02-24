@@ -40,7 +40,8 @@ detect_os() {
 # 检查 UV 是否已安装
 check_uv() {
     if command -v uv &> /dev/null; then
-        local uv_version=$(uv --version 2>&1 | head -n 1)
+        local uv_version
+        uv_version=$(uv --version 2>&1 | head -n 1)
         print_success "UV is already installed: $uv_version"
         return 0
     else
@@ -53,7 +54,8 @@ check_uv() {
 install_uv() {
     print_info "Installing UV..."
     
-    local os=$(detect_os)
+    local os
+    os=$(detect_os)
     
     case "$os" in
         linux|macos)
@@ -228,7 +230,8 @@ initialize_config() {
             local registered_count=0
             for env_dir in "${envs_dir}"/*; do
                 if [ -d "$env_dir" ]; then
-                    local env_name=$(basename "$env_dir")
+                    local env_name
+                    env_name=$(basename "$env_dir")
                     
                     # 跳过隐藏目录和特殊文件
                     if [[ "$env_name" == .* ]] || [[ "$env_name" == "desktop.ini" ]] || [[ "$env_name" == *.ico ]]; then
@@ -257,7 +260,8 @@ initialize_config() {
                             # 添加到 envs.json
                             local record="{\"name\":\"${env_name}\",\"path\":\"${env_dir}\",\"python\":\"${python_version}\",\"created\":\"${timestamp}\"}"
                             local envs_file="${HOME}/.config/uvm/envs.json"
-                            local content=$(cat "${envs_file}")
+                            local content
+                            content=$(cat "${envs_file}")
                             
                             if [ "$content" = "[]" ]; then
                                 echo "[${record}]" > "${envs_file}"
@@ -491,7 +495,8 @@ interactive_setup() {
     # 检查 UV 是否安装（重定向输出到 stderr）
     if ! check_uv >&2; then
         echo "" >&2
-        local os=$(detect_os)
+        local os
+        os=$(detect_os)
         if [ "$os" = "windows" ]; then
             print_warning "On Windows, UV must be installed manually in PowerShell:" >&2
             print_info "  powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"" >&2
@@ -532,9 +537,9 @@ interactive_setup() {
 # 主安装流程
 main() {
     # 检测执行模式 (本地 vs 远程)
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
     local temp_dir=""
-    local is_remote_install=false
     
     # 如果 bin 目录不存在,说明是远程执行
     if [ ! -d "${script_dir}/bin" ]; then
@@ -633,7 +638,8 @@ EOF
     echo ""
     
     # 检测操作系统
-    local os=$(detect_os)
+    local os
+    os=$(detect_os)
     print_info "Detected OS: $os"
     echo ""
     
@@ -643,7 +649,8 @@ EOF
     
     if [ "$non_interactive" = false ] && [ -z "$custom_envs_dir" ]; then
         # 运行交互式向导
-        local config_result=$(interactive_setup)
+        local config_result
+        config_result=$(interactive_setup)
         custom_envs_dir=$(echo "$config_result" | sed -n '1p')
         install_uv_choice=$(echo "$config_result" | sed -n '2p')
         enable_auto_activation=$(echo "$config_result" | sed -n '3p')

@@ -2,6 +2,7 @@
 
 # 加载配置模块
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/uvm-config.sh
 source "${SCRIPT_DIR}/uvm-config.sh"
 
 # 创建虚拟环境
@@ -110,7 +111,8 @@ uvm_activate() {
     fi
     
     # 查找环境路径
-    local env_path=$(get_env_path "$env_name")
+    local env_path
+    env_path=$(get_env_path "$env_name")
     
     if [ -z "$env_path" ]; then
         echo "Error: Environment '${env_name}' not found"
@@ -132,6 +134,7 @@ uvm_activate() {
     
     # 激活环境
     echo "Activating environment '${env_name}'..."
+    # shellcheck source=/dev/null
     source "$activate_script"
     
     if [ $? -eq 0 ]; then
@@ -193,7 +196,8 @@ uvm_delete() {
     fi
     
     # 查找环境路径
-    local env_path=$(get_env_path "$env_name")
+    local env_path
+    env_path=$(get_env_path "$env_name")
     
     if [ -z "$env_path" ]; then
         echo "Error: Environment '${env_name}' not found"
@@ -233,13 +237,13 @@ uvm_delete() {
 # 列出所有虚拟环境
 uvm_list() {
     local uvm_envs_dir="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
-    local show_all=false
+    local _show_all=false
     
     # 解析参数
     while [ $# -gt 0 ]; do
         case "$1" in
             -a|--all)
-                show_all=true
+                _show_all=true
                 shift
                 ;;
             *)
@@ -258,7 +262,8 @@ uvm_list() {
     if [ -d "$uvm_envs_dir" ]; then
         for env_dir in "$uvm_envs_dir"/*; do
             if [ -d "$env_dir" ]; then
-                local env_name=$(basename "$env_dir")
+                local env_name
+                env_name=$(basename "$env_dir")
                 
                 # 检查是否是有效的虚拟环境
                 local activate_script=""

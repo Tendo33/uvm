@@ -62,7 +62,8 @@ get_shell_rc() {
 # 主逻辑
 main() {
     # 检测 shell
-    local current_shell=$(detect_current_shell)
+    local current_shell
+    current_shell=$(detect_current_shell)
     echo -e "${BLUE}Detected shell: ${current_shell}${NC}"
     
     if [ "$current_shell" = "unknown" ]; then
@@ -73,7 +74,8 @@ main() {
     fi
     
     # 获取配置文件
-    local shell_rc=$(get_shell_rc "$current_shell")
+    local shell_rc
+    shell_rc=$(get_shell_rc "$current_shell")
     echo -e "${BLUE}Shell config file: ${shell_rc}${NC}"
     echo ""
     
@@ -98,6 +100,7 @@ EOF
     
     # 加载配置
     if [ -f "${HOME}/.config/uvm/config" ]; then
+        # shellcheck source=/dev/null
         source "${HOME}/.config/uvm/config"
     fi
     

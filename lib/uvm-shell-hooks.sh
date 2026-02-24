@@ -26,6 +26,7 @@ uvm_auto_activate() {
                     fi
                     
                     echo "🔄 Auto-activating local .venv"
+                    # shellcheck source=/dev/null
                     source "$activate_script"
                     export UVM_AUTO_ACTIVATED="local"
                     export UVM_AUTO_ACTIVATED_PATH="$current_dir/.venv"
@@ -41,7 +42,8 @@ uvm_auto_activate() {
     
     # 优先级 2: 检查 .uvmrc（共享环境）
     if [ -f ".uvmrc" ]; then
-        local env_name=$(cat .uvmrc | tr -d '[:space:]' | head -n 1)
+        local env_name
+        env_name=$(cat .uvmrc | tr -d '[:space:]' | head -n 1)
         
         # 安全校验：只允许字母、数字、下划线、连字符（防止路径穿越）
         if [ -n "$env_name" ] && [[ ! "$env_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
@@ -71,6 +73,7 @@ uvm_auto_activate() {
                     fi
                     
                     echo "🔄 Auto-activating uvm environment: $env_name"
+                    # shellcheck source=/dev/null
                     source "$activate_script"
                     export UVM_AUTO_ACTIVATED="uvm:$env_name"
                     export UVM_AUTO_ACTIVATED_PATH="$env_path"
@@ -90,7 +93,8 @@ uvm_auto_activate() {
         
         # 如果是本地 .venv，检查是否还在项目目录内
         if [ "$UVM_AUTO_ACTIVATED" = "local" ] && [ -n "$UVM_AUTO_ACTIVATED_PATH" ]; then
-            local venv_project_dir=$(dirname "$UVM_AUTO_ACTIVATED_PATH")
+            local venv_project_dir
+            venv_project_dir=$(dirname "$UVM_AUTO_ACTIVATED_PATH")
             # 检查当前路径是否在项目目录下
             case "$PWD" in
                 "$venv_project_dir"*)

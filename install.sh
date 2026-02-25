@@ -581,7 +581,7 @@ main() {
                 ;;
             --help|-h)
                 cat <<EOF
-UVM Installer v1.0.4
+UVM Installer v1.0.5
 
 Usage: ./install.sh [OPTIONS]
 
@@ -631,7 +631,7 @@ EOF
     
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║                  UVM Installer v1.0.4                      ║"
+    echo "║                  UVM Installer v1.0.5                      ║"
     echo "║          UV Manager - Conda-like Environment Manager       ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""

@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.5] - 2026-02-25
+
+### 修复
+- **CI 构建**：修复 GitHub Release CI 中打包时的“file changed as we read it”错误
+
+---
+
 ## [1.0.4] - 2026-02-24
 
 ### 修复
@@ -128,6 +135,7 @@
 
 ---
 
+[1.0.5]: https://github.com/Tendo33/uvm/releases/tag/v1.0.5
 [1.0.4]: https://github.com/Tendo33/uvm/releases/tag/v1.0.4
 [1.0.3]: https://github.com/Tendo33/uvm/releases/tag/v1.0.3
 [1.0.2]: https://github.com/Tendo33/uvm/releases/tag/v1.0.2

@@ -1,347 +1,454 @@
-# UVM Project Documentation
+# UVM 项目技术文档
 
-**Project Name**: uvm - UV Manager  
-**Version**: 1.0.2  
-**Date**: 2025-12-26  
-**Status**: ✅ Completed
-
----
-
-## 📋 Project Overview
-
-uvm (UV Manager) is a Conda-like environment manager for UV, designed to simplify Python virtual environment management with UV's blazing-fast performance and Conda's intuitive commands.
-
-### Key Features
-
-- **Conda-like Commands**: `create`, `activate`, `deactivate`, `delete`, `list`
-- **Smart Auto-Activation**: Dual-mode support for `.venv` and `.uvmrc`
-- **China Mirrors**: Pre-configured Tsinghua University mirrors
-- **Cross-Platform**: Linux, macOS, Windows (Git Bash)
+**项目名称**：uvm - UV Environment Manager  
+**当前版本**：1.1.0  
+**文档更新时间**：2026-04-12  
+**状态**：已对齐当前实现
 
 ---
 
-## 🏗️ Architecture
+## 1. 项目定位
 
-### Component Structure
+`uvm` 是一个以 Bash 为核心、类 Conda 体验的 `uv` 环境管理工具。它的目标不是替代 `uv`，而是为共享环境管理、自动激活、镜像配置和常见排障提供一层轻量而稳定的工作流。
 
-```
+当前版本重点：
+
+- 统一 `UVM_HOME` / `UVM_ENVS_DIR` 解析逻辑
+- 用 `envs.d/*.env` 重构元数据存储
+- 用受管 block 管理 shell 配置和 mirror 配置
+- 让 `.venv` / `.uvmrc` 自动激活支持向上查找
+- 提供 `uvm doctor` 与 `uvm repair`
+
+---
+
+## 2. 目录结构
+
+```text
 uvm/
 ├── bin/
-│   └── uvm                    # Main CLI entry point
+│   └── uvm
 ├── lib/
-│   ├── uvm-config.sh          # Configuration management
-│   ├── uvm-core.sh            # Core commands implementation
-│   └── uvm-shell-hooks.sh     # Shell integration & auto-activation
+│   ├── uvm-config.sh
+│   ├── uvm-core.sh
+│   └── uvm-shell-hooks.sh
 ├── templates/
-│   └── uv.toml.template       # Mirror configuration template
-├── install.sh                 # Installation script
-├── README.md                  # User documentation
-├── EXAMPLES.md                # Usage examples
-└── LICENSE                    # MIT License
-```
-
-### Module Dependencies
-
-```mermaid
-graph TD
-    CLI[bin/uvm] --> Config[lib/uvm-config.sh]
-    CLI --> Core[lib/uvm-core.sh]
-    CLI --> Hooks[lib/uvm-shell-hooks.sh]
-    
-    Core --> Config
-    Hooks --> Config
-    
-    Install[install.sh] --> Config
-    Install --> CLI
+│   └── uv.toml.template
+├── tests/
+│   └── uvm.bats
+├── .github/workflows/
+│   └── ci.yml
+├── install.sh
+├── uninstall.sh
+├── fix-shell-hook.sh
+├── README.md
+├── README_CN.md
+└── project_document/
+    ├── main.md
+    └── UNINSTALL.md
 ```
 
 ---
 
-## 🔧 Implementation Details
+## 3. 模块职责
 
-### 1. Configuration Module (`lib/uvm-config.sh`)
+### 3.1 `bin/uvm`
 
-**Responsibilities**:
-- UV mirror configuration
-- UVM config initialization
-- Environment metadata management
-- Shell detection
+CLI 入口，负责：
 
-**Key Functions**:
-- `setup_uv_mirror()`: Configure Tsinghua mirrors
-- `init_uvm_config()`: Initialize config directories
-- `add_env_record()`: Add environment to metadata
-- `get_env_path()`: Resolve environment path
+- 加载配置层与核心逻辑
+- 解析命令行参数
+- 路由命令到对应模块
+- 暴露版本号与帮助信息
 
-### 2. Core Commands Module (`lib/uvm-core.sh`)
+当前支持命令：
 
-**Responsibilities**:
-- Environment creation
-- Environment activation/deactivation
-- Environment deletion
-- Environment listing
+- `create`
+- `activate`
+- `deactivate`
+- `delete`
+- `list`
+- `scan`
+- `init`
+- `doctor`
+- `repair`
+- `config`
+- `shell-hook`
+- `help`
+- `version`
 
-**Key Functions**:
-- `uvm_create()`: Create virtual environment with `uv venv`
-- `uvm_activate()`: Activate environment (shell integration required)
-- `uvm_deactivate()`: Deactivate current environment
-- `uvm_delete()`: Delete environment with confirmation
-- `uvm_list()`: List all managed environments
+### 3.2 `lib/uvm-config.sh`
 
-### 3. Shell Hooks Module (`lib/uvm-shell-hooks.sh`)
+配置与底层工具层，负责：
 
-**Responsibilities**:
-- Auto-activation logic
-- Shell integration
-- Directory change hooks
+- 解析 `UVM_HOME`
+- 解析 `UVM_ENVS_DIR`
+- 初始化配置目录
+- 管理环境记录文件
+- 提供 metadata lock
+- 提供路径安全检查辅助函数
+- 管理 shell block / mirror block
+- 管理 legacy `envs.json` 迁移
 
-**Key Functions**:
-- `uvm_auto_activate()`: Smart environment detection and activation
-- `uvm_generate_shell_hook()`: Generate shell integration code
+关键事实：
 
-**Auto-Activation Priority**:
-1. **Local `.venv`** (highest priority)
-   - Searches current and parent directories
-   - Auto-activates if found
-2. **Shared environment via `.uvmrc`**
-   - Reads environment name from `.uvmrc`
-   - Activates from `~/uv_envs/`
-3. **Auto-deactivation**
-   - Deactivates when leaving project directory
+- 元数据目录固定为 `$(uvm_get_home)/envs.d`
+- 每个环境一条记录，记录文件后缀为 `.env`
+- 旧版 `envs.json` 不再作为主存储，仅用于迁移
 
-### 4. Main CLI (`bin/uvm`)
+### 3.3 `lib/uvm-core.sh`
 
-**Responsibilities**:
-- Command routing
-- Argument parsing
-- Environment variable initialization
+核心命令实现层，负责：
 
-**Supported Commands**:
-- `create`: Create new environment
-- `activate`: Activate environment (requires shell-hook)
-- `deactivate`: Deactivate environment (requires shell-hook)
-- `delete`: Delete environment
-- `list`: List all environments
-- `init`: Initialize configuration
-- `config`: Manage configuration
-- `shell-hook`: Generate shell integration code
-- `help`: Show help message
-- `version`: Show version
+- 创建环境
+- 删除环境
+- 列出环境
+- 元数据修复与扫描
+- 诊断输出
+
+关键能力：
+
+- `uvm create --path` 创建的环境会被纳入元数据管理
+- 删除前会验证目标路径是否属于安全删除范围
+- `uvm doctor` 输出当前配置、PATH、shell hook、mirror、活动环境状态
+- `uvm repair` 做可恢复修复，不做破坏性清理
+
+### 3.4 `lib/uvm-shell-hooks.sh`
+
+shell 集成与自动激活层，负责：
+
+- 生成 `uvm shell-hook`
+- 在 shell 内拦截 `uvm activate` / `uvm deactivate`
+- 实现自动激活
+- 基于 prompt / `chpwd` hook 执行目录检查
+
+关键变化：
+
+- 不再通过覆盖 `cd` 实现自动激活
+- `.venv` 和 `.uvmrc` 都支持向上查找
+- 进入项目子目录时仍可保持激活
 
 ---
 
-## 📦 Installation Process
+## 4. 配置模型
 
-The `install.sh` script supports two execution modes:
+### 4.1 生效路径
 
-### Remote Installation (Recommended)
+- `UVM_HOME` 默认值：`~/.config/uvm`
+- `UVM_ENVS_DIR` 默认值：`~/uv_envs`
+- 主配置文件：`~/.config/uvm/config`
+- 元数据目录：`~/.config/uvm/envs.d`
+- 锁目录：`~/.config/uvm/locks`
+- `uv` 配置文件：`~/.config/uv/uv.toml`
 
-Users can install directly via curl/wget:
+### 4.2 元数据布局
+
+当前版本使用如下结构：
+
+```text
+~/.config/uvm/
+├── config
+├── envs.d/
+│   ├── myenv.env
+│   └── shared-311.env
+└── locks/
+```
+
+单条记录示意：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash
+UVM_RECORD_NAME=myenv
+UVM_RECORD_PATH=/home/user/uv_envs/myenv
+UVM_RECORD_PYTHON=3.12.1
+UVM_RECORD_CREATED=2026-04-12T10:00:00+0800
 ```
 
-**Process:**
-1. **Detect Execution Mode**: Check if `bin/` directory exists
-2. **Download Files** (if remote):
-   - Create temporary directory with `mktemp -d`
-   - Download 5 files from GitHub raw URL:
-     * `bin/uvm`
-     * `lib/uvm-config.sh`
-     * `lib/uvm-core.sh`
-     * `lib/uvm-shell-hooks.sh`
-     * `templates/uv.toml.template`
-   - Use curl (primary) or wget (fallback)
-   - Set trap for cleanup on exit
-3. **Detect OS**: Linux, macOS, or Windows
-4. **Check UV**: Verify UV installation (offer to install if missing)
-5. **Install uvm**:
-   - Copy `bin/uvm` to `~/.local/bin/`
-   - Copy `lib/*` to `~/.local/lib/uvm/`
-   - Copy `templates/*` to `~/.config/uvm/templates/`
-6. **Configure PATH**: Add `~/.local/bin` to PATH if needed
-7. **Initialize Config**:
-   - Create `~/.config/uvm/`
-   - Create `~/uv_envs/`
-   - Configure UV mirrors in `~/.config/uv/uv.toml`
-8. **Cleanup**: Remove temporary directory (if remote)
-9. **Post-Install Instructions**: Guide user to enable shell-hook
+设计目的：
 
-### Local Installation (For Development)
+- 纯 Bash 下易维护
+- 单条记录可原子更新
+- 易于去重、删除、重建
+- 为并发写预留锁机制
 
-Developers can clone and install:
+### 4.3 legacy 迁移策略
+
+如果旧版 `envs.json` 存在，且 `envs.d/` 下还没有记录文件，则会进行一次迁移。迁移完成后，主逻辑始终以 `envs.d/` 为准。
+
+---
+
+## 5. 命令行为说明
+
+### 5.1 `create`
+
+- 校验环境名合法性
+- 支持 `--python`
+- 支持 `--path`
+- 创建成功后写入元数据
+
+### 5.2 `list`
+
+- 先列受管记录
+- 再补默认目录下已存在但尚未写入记录的有效环境
+- `--all` 显示来源列
+
+### 5.3 `delete`
+
+- 禁止删除当前激活环境
+- 禁止删除越界路径
+- 删除目录后同步清理元数据
+
+### 5.4 `doctor`
+
+输出以下诊断维度：
+
+- 平台
+- shell
+- shell rc 文件
+- shell hook 状态
+- `UVM_HOME`
+- `UVM_ENVS_DIR`
+- 元数据数量
+- `~/.local/bin` 是否进入 PATH
+- `uv` 版本
+- mirror block 状态
+- 当前活动环境
+- 当前环境是否来自自动激活
+
+### 5.5 `repair`
+
+执行内容：
+
+- 清理无效记录
+- 重新扫描默认环境目录
+- 修复 shell hook 受管 block
+- 修复 mirror 受管 block
+
+适用场景：
+
+- shell 集成丢失
+- 元数据损坏或不完整
+- PATH / shell / 自动激活行为异常后的恢复
+
+---
+
+## 6. 自动激活机制
+
+### 6.1 查找优先级
+
+自动激活按以下顺序工作：
+
+1. 最近的父级 `.venv`
+2. 最近的父级 `.uvmrc`
+
+### 6.2 `.venv` 逻辑
+
+- 从当前目录开始向上查找
+- 找到有效 `.venv` 后直接激活
+- 即使当前位于项目子目录，也会继承项目根的 `.venv`
+
+### 6.3 `.uvmrc` 逻辑
+
+- 向上查找最近的 `.uvmrc`
+- 读取环境名
+- 先验证环境名是否合法
+- 再从 record 文件或默认环境目录中解析路径
+
+### 6.4 自动失活逻辑
+
+- 当离开原项目上下文，且当前环境来自自动激活时，自动执行失活
+- 手动激活环境不会被误判成自动激活状态
+
+### 6.5 shell hook 机制
+
+- Bash：通过 `PROMPT_COMMAND` 注入检查逻辑
+- Zsh：通过 `chpwd` / `precmd` hook 注入检查逻辑
+- 不再覆写 `cd`
+
+---
+
+## 7. 安装流程
+
+### 7.1 安装器职责
+
+`install.sh` 负责：
+
+- 检测运行平台
+- 检测 `uv`
+- 在需要时下载项目文件
+- 安装二进制与库文件
+- 初始化配置目录
+- 写入 PATH 受管 block
+- 可选写入 shell hook 受管 block
+- 初始化镜像 block
+
+### 7.2 非交互模式行为
+
+`bash install.sh -y` 或使用 `--envs-dir` 时，会进入非交互模式。
+
+约束：
+
+- 缺少 `uv` 时直接失败
+- 适合自动化与 CI
+
+### 7.3 shell 配置写入方式
+
+当前版本通过起止标记写入：
 
 ```bash
-git clone https://github.com/Tendo33/uvm.git
-cd uvm
-./install.sh
+# >>> uvm path >>>
+export PATH="${HOME}/.local/bin:$PATH"
+# <<< uvm path <<<
+
+# >>> uvm shell >>>
+eval "$(uvm shell-hook)"
+# <<< uvm shell <<<
 ```
 
-**Process:** Same as remote, but skips step 2 (download) and uses local files directly
+这个机制确保：
+
+- 重复安装不会重复写入
+- 升级不会无限追加
+- `repair` 可以重建 block
+- 卸载可以精准删除 block
+
+### 7.4 mirror 配置写入方式
+
+镜像配置不再粗暴覆盖整个 `uv.toml`，而是仅更新 `uvm` 受管 block，并保留一次性备份。
+如果检测到文件中已存在非 `uvm` 管理的 `[[index]]` 或 `[python-downloads]` 段，则跳过写入并给出警告，避免制造冲突配置。
 
 ---
 
-## 🔄 Auto-Activation Flow
+## 8. 卸载流程
 
-```mermaid
-graph TD
-    A[cd into directory] --> B{Check for .venv}
-    B -->|Found| C[Activate local .venv]
-    B -->|Not found| D{Check for .uvmrc}
-    D -->|Found| E[Read environment name]
-    E --> F[Activate shared environment]
-    D -->|Not found| G{Previously auto-activated?}
-    G -->|Yes| H[Deactivate environment]
-    G -->|No| I[No action]
-    
-    C --> J[Set UVM_AUTO_ACTIVATED=local]
-    F --> K[Set UVM_AUTO_ACTIVATED=uvm:name]
-```
+`uninstall.sh` 负责：
 
----
+- 展示将被删除的内容
+- 备份 shell rc
+- 移除 shell 中由 `uvm` 管理的 block
+- 删除 `~/.local/bin/uvm`
+- 删除 `~/.local/lib/uvm`
+- 删除 `~/.config/uvm`
 
-## 🧪 Testing Scenarios
+默认保留：
 
-### Manual Testing Checklist
+- 虚拟环境目录
+- `uv`
+- `~/.config/uv/uv.toml`
 
-- [x] **Installation**
-  - [x] Install on Linux
-  - [x] Install on macOS
-  - [x] Install on Windows (Git Bash)
-  
-- [x] **Basic Commands**
-  - [x] `uvm create myenv`
-  - [x] `uvm create myenv --python 3.11`
-  - [x] `uvm list`
-  - [x] `uvm delete myenv`
-  
-- [x] **Shell Integration**
-  - [x] `eval "$(uvm shell-hook)"`
-  - [x] `uvm activate myenv`
-  - [x] `uvm deactivate`
-  
-- [x] **Auto-Activation**
-  - [x] Local `.venv` detection
-  - [x] `.uvmrc` file support
-  - [x] Auto-deactivation on directory change
-  
-- [x] **Configuration**
-  - [x] Mirror configuration
-  - [x] Custom environment directory
+可选参数：
+
+- `--force`：跳过确认
+- `--keep-shell-config`：保留 shell block
 
 ---
 
-## 📊 Performance Considerations
+## 9. 安全设计
 
-### UV vs pip Comparison
+### 9.1 环境名校验
 
-| Operation | pip | UV | Speedup |
-|-----------|-----|-----|---------|
-| Install numpy | ~10s | ~1s | 10x |
-| Install pandas | ~15s | ~1.5s | 10x |
-| Install requirements.txt (50 packages) | ~120s | ~12s | 10x |
+允许字符：
 
-### Disk Space
+- 字母
+- 数字
+- `.`
+- `_`
+- `-`
 
-- **uvm binary**: ~50KB
-- **Library files**: ~30KB
-- **Per environment**: ~50-200MB (depends on packages)
+显式拒绝：
 
----
+- 路径分隔符
+- `..`
+- 空格
+- 命令拼接字符
 
-## 🔒 Security Considerations
+### 9.2 删除安全
 
-1. **Script Execution**: All scripts require explicit execution permission
-2. **Mirror Configuration**: Uses HTTPS for all mirror URLs
-3. **Environment Isolation**: Each environment is isolated in its own directory
-4. **No Sudo Required**: Installation in user directory (`~/.local/`)
+删除前会验证：
 
----
+- 环境名是否合法
+- 目标是否是当前激活环境
+- 目标路径是否属于受管记录或默认环境目录的安全子路径
 
-## 🐛 Known Limitations
+### 9.3 元数据写入
 
-1. **Windows Support**: Requires Git Bash or WSL (PowerShell/CMD not supported)
-2. **Shell Integration**: Must run `eval "$(uvm shell-hook)"` for activate/deactivate
-3. **JSON Parsing**: Uses simple grep/sed (production should use `jq`)
-4. **Environment Export**: No built-in export/import (use `pip freeze`)
+- 使用临时文件 + `mv`
+- 使用锁目录避免并发写冲突
 
----
+### 9.4 shell 配置安全
 
-## 🗺️ Future Enhancements
-
-### Short-term (v1.1)
-- [ ] Shell completion (Bash/Zsh)
-- [ ] Environment export/import commands
-- [ ] Better error messages
-- [ ] Logging system
-
-### Medium-term (v1.2)
-- [ ] Environment cloning
-- [ ] Fish shell support
-- [ ] PowerShell support
-- [ ] GUI installer
-
-### Long-term (v2.0)
-- [ ] `pyenv` integration
-- [ ] Remote environment management
-- [ ] Team environment sharing
-- [ ] Docker integration
+- 只删除起止标记之间的 `uvm` 受管 block
+- 不再使用 `grep -v "uvm"` 这类粗暴清理方式
 
 ---
 
-## 📝 Development Notes
+## 10. 测试与 CI
 
-### Code Style
-- **SOLID Principles**: Each module has single responsibility
-- **RIPER-7 Comments**: All files include RIPER-7 headers
-- **Error Handling**: Proper exit codes and error messages
-- **Cross-Platform**: Compatible with Linux, macOS, Windows (Git Bash)
+### 10.1 BATS 覆盖范围
 
-### Git Workflow
-```bash
-# Feature development
-git checkout -b feature/new-feature
-git commit -m "feat: add new feature"
-git push origin feature/new-feature
+当前 `tests/uvm.bats` 已覆盖：
 
-# Bug fixes
-git checkout -b fix/bug-description
-git commit -m "fix: resolve bug"
-git push origin fix/bug-description
-```
+- `UVM_HOME` 下的新目录布局
+- 环境名合法/非法校验
+- `uvm create --path`
+- 元数据新增与删除
+- 父级 `.uvmrc` 自动激活继承
+- 受管 block 幂等性
+- `uvm repair`
+- `uvm doctor`
 
-### Release Process
-1. Update version in `bin/uvm`
-2. Update CHANGELOG.md
-3. Tag release: `git tag v1.0.0`
-4. Push tag: `git push origin v1.0.0`
-5. Create GitHub release
+### 10.2 CI 分层
 
----
+`.github/workflows/ci.yml` 当前包含：
 
-## 📚 References
+- ShellCheck
+- 语法检查
+- BATS 行为测试
+- Windows Git Bash smoke 测试
 
-- [UV Documentation](https://docs.astral.sh/uv/)
-- [Conda Documentation](https://docs.conda.io/)
-- [uv-custom Project](https://github.com/Wangnov/uv-custom)
-- [Bash Best Practices](https://google.github.io/styleguide/shellguide.html)
+Windows smoke 至少覆盖：
+
+- install
+- list
+- shell-hook
+- doctor
 
 ---
 
-## 👥 Contributors
+## 11. 平台支持边界
 
-- Initial implementation: RIPER-7 AI System
-- Project concept: Based on user requirements
-
----
-
-## 📄 License
-
-MIT License - See [LICENSE](../LICENSE) file for details.
+- Linux：完整支持
+- macOS：完整支持
+- Windows Git Bash：支持并已进入 CI smoke 范围
+- Windows 原生 PowerShell / CMD：本轮未承诺支持，仅为未来扩展预留结构
 
 ---
 
-**Last Updated**: 2025-12-26  
-**Document Version**: 1.0
+## 12. 已知限制与后续方向
 
+当前限制：
+
+- 仍以 Bash 为唯一核心实现
+- 不提供 PowerShell / CMD 原生集成
+- 暂无 `export / import`
+- 暂无 shell completion
+
+后续方向：
+
+- 环境导出 / 导入
+- shell completion
+- 更丰富的环境描述信息
+- 更多 shell 适配层
+
+---
+
+## 13. 文档同步原则
+
+本文档、`README.md`、`README_CN.md`、`project_document/UNINSTALL.md` 应与以下真实实现保持同步：
+
+- `bin/uvm`
+- `lib/uvm-config.sh`
+- `lib/uvm-core.sh`
+- `lib/uvm-shell-hooks.sh`
+- `install.sh`
+- `uninstall.sh`
+
+如果未来命令语义、元数据布局、shell block 或 mirror block 发生变化，应优先同步这些文档，避免“实现已改、文档仍旧”的漂移。

@@ -1,324 +1,257 @@
 #!/bin/bash
 
-# 智能自动激活函数
-uvm_auto_activate() {
-    local uvm_envs_dir="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
-    
-    # 优先级 1: 检查项目本地 .venv（向上查找，最多 5 层）
-    local current_dir="$PWD"
-    local _uvm_depth=0
-    while [ "$current_dir" != "/" ] && [ "$current_dir" != "" ] && [ "$_uvm_depth" -lt 5 ]; do
-        if [ -d "$current_dir/.venv" ]; then
-            local activate_script=""
-            if [ -f "$current_dir/.venv/bin/activate" ]; then
-                activate_script="$current_dir/.venv/bin/activate"
-            elif [ -f "$current_dir/.venv/Scripts/activate" ]; then
-                # Windows Git Bash
-                activate_script="$current_dir/.venv/Scripts/activate"
-            fi
-            
-            if [ -n "$activate_script" ]; then
-                # 检查是否已经激活了这个环境
-                if [ "$VIRTUAL_ENV" != "$current_dir/.venv" ]; then
-                    # 如果有其他环境激活，先停用
-                    if [ -n "$VIRTUAL_ENV" ] && command -v deactivate &> /dev/null; then
-                        deactivate 2>/dev/null || true
-                    fi
-                    
-                    echo "🔄 Auto-activating local .venv"
-                    # shellcheck source=/dev/null
-                    source "$activate_script"
-                    export UVM_AUTO_ACTIVATED="local"
-                    export UVM_AUTO_ACTIVATED_PATH="$current_dir/.venv"
-                fi
-                return 0
-            fi
-        fi
-        
-        # 向上一级目录
-        _uvm_depth=$((_uvm_depth + 1))
-        current_dir=$(dirname "$current_dir")
-    done
-    
-    # 优先级 2: 检查 .uvmrc（共享环境）
-    if [ -f ".uvmrc" ]; then
-        local env_name
-        env_name=$(cat .uvmrc | tr -d '[:space:]' | head -n 1)
-        
-        # 安全校验：只允许字母、数字、下划线、连字符（防止路径穿越）
-        if [ -n "$env_name" ] && [[ ! "$env_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-            echo "⚠️  .uvmrc 中包含非法环境名称，已跳过自动激活: '$env_name'"
-            return 0
-        fi
-        
-        if [ -n "$env_name" ]; then
-            local env_path="$uvm_envs_dir/$env_name"
-            
-            # 检查环境是否存在
-            local activate_script=""
-            if [ -d "$env_path" ]; then
-                if [ -f "$env_path/bin/activate" ]; then
-                    activate_script="$env_path/bin/activate"
-                elif [ -f "$env_path/Scripts/activate" ]; then
-                    activate_script="$env_path/Scripts/activate"
-                fi
-            fi
-            
-            if [ -n "$activate_script" ]; then
-                # 检查是否已经激活了这个环境
-                if [ "$VIRTUAL_ENV" != "$env_path" ]; then
-                    # 如果有其他环境激活，先停用
-                    if [ -n "$VIRTUAL_ENV" ] && command -v deactivate &> /dev/null; then
-                        deactivate 2>/dev/null || true
-                    fi
-                    
-                    echo "🔄 Auto-activating uvm environment: $env_name"
-                    # shellcheck source=/dev/null
-                    source "$activate_script"
-                    export UVM_AUTO_ACTIVATED="uvm:$env_name"
-                    export UVM_AUTO_ACTIVATED_PATH="$env_path"
-                fi
-                return 0
-            else
-                echo "⚠️  Environment '$env_name' specified in .uvmrc not found"
-                echo "   Run 'uvm create $env_name' to create it"
-            fi
-        fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/uvm-config.sh
+source "${SCRIPT_DIR}/uvm-config.sh"
+
+uvm_shell_load_runtime_config() {
+    export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
+    if [ -f "$(uvm_get_config_file)" ]; then
+        # shellcheck source=/dev/null
+        source "$(uvm_get_config_file)"
     fi
-    
-    # 如果都不满足，且之前有自动激活的环境，则停用
-    if [ -n "$UVM_AUTO_ACTIVATED" ] && [ -n "$VIRTUAL_ENV" ]; then
-        # 检查是否离开了激活环境的目录
-        local should_deactivate=true
-        
-        # 如果是本地 .venv，检查是否还在项目目录内
-        if [ "$UVM_AUTO_ACTIVATED" = "local" ] && [ -n "$UVM_AUTO_ACTIVATED_PATH" ]; then
-            local venv_project_dir
-            venv_project_dir=$(dirname "$UVM_AUTO_ACTIVATED_PATH")
-            # 检查当前路径是否在项目目录下
-            case "$PWD" in
-                "$venv_project_dir"*)
-                    should_deactivate=false
-                    ;;
-            esac
-        fi
-        
-        # 如果是 .uvmrc 环境，检查当前目录是否还有 .uvmrc
-        if [[ "$UVM_AUTO_ACTIVATED" == uvm:* ]] && [ -f ".uvmrc" ]; then
-            should_deactivate=false
-        fi
-        
-        if [ "$should_deactivate" = true ]; then
-            echo "🔻 Deactivating environment (left project directory)"
-            if command -v deactivate &> /dev/null; then
-                deactivate 2>/dev/null || true
-            fi
-            unset UVM_AUTO_ACTIVATED
-            unset UVM_AUTO_ACTIVATED_PATH
-        fi
-    fi
+    export UVM_ENVS_DIR="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
 }
 
-# 生成 Shell 钩子代码
-uvm_generate_shell_hook() {
-    cat <<'EOF'
-# UVM Shell Hook - Auto-activation support
-# Generated by uvm shell-hook
-
-# Load UVM configuration
-export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
-if [ -f "${UVM_HOME}/config" ]; then
-    source "${UVM_HOME}/config"
-fi
-
-# Set default environment directory
-export UVM_ENVS_DIR="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
-
-# Auto-activation function
-uvm_auto_activate() {
-    local uvm_envs_dir="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
-    
-    # Priority 1: Check for local .venv (search up to 5 levels)
-    local current_dir="$PWD"
-    local _uvm_depth=0
-    while [ "$current_dir" != "/" ] && [ "$current_dir" != "" ] && [ "$_uvm_depth" -lt 5 ]; do
-        if [ -d "$current_dir/.venv" ]; then
-            local activate_script=""
-            if [ -f "$current_dir/.venv/bin/activate" ]; then
-                activate_script="$current_dir/.venv/bin/activate"
-            elif [ -f "$current_dir/.venv/Scripts/activate" ]; then
-                activate_script="$current_dir/.venv/Scripts/activate"
-            fi
-            
-            if [ -n "$activate_script" ]; then
-                if [ "$VIRTUAL_ENV" != "$current_dir/.venv" ]; then
-                    if [ -n "$VIRTUAL_ENV" ] && command -v deactivate &> /dev/null; then
-                        deactivate 2>/dev/null || true
-                    fi
-                    source "$activate_script"
-                    export UVM_AUTO_ACTIVATED="local"
-                    export UVM_AUTO_ACTIVATED_PATH="$current_dir/.venv"
-                fi
-                return 0
-            fi
-        fi
-        _uvm_depth=$((_uvm_depth + 1))
-        current_dir=$(dirname "$current_dir")
-    done
-    
-    # Priority 2: Check for .uvmrc
-    if [ -f ".uvmrc" ]; then
-        local env_name=$(cat .uvmrc | tr -d '[:space:]' | head -n 1)
-        
-        # Security: only allow valid env names (letters, digits, underscore, hyphen)
-        if [ -n "$env_name" ] && [[ ! "$env_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-            echo "Warning: Invalid environment name in .uvmrc, skipping auto-activation: '$env_name'"
-            return 0
-        fi
-        
-        if [ -n "$env_name" ]; then
-            local env_path="$uvm_envs_dir/$env_name"
-            local activate_script=""
-            
-            if [ -d "$env_path" ]; then
-                if [ -f "$env_path/bin/activate" ]; then
-                    activate_script="$env_path/bin/activate"
-                elif [ -f "$env_path/Scripts/activate" ]; then
-                    activate_script="$env_path/Scripts/activate"
-                fi
-            fi
-            
-            if [ -n "$activate_script" ]; then
-                if [ "$VIRTUAL_ENV" != "$env_path" ]; then
-                    if [ -n "$VIRTUAL_ENV" ] && command -v deactivate &> /dev/null; then
-                        deactivate 2>/dev/null || true
-                    fi
-                    source "$activate_script"
-                    export UVM_AUTO_ACTIVATED="uvm:$env_name"
-                    export UVM_AUTO_ACTIVATED_PATH="$env_path"
-                fi
-                return 0
-            fi
-        fi
-    fi
-    
-    # Deactivate if left project directory
-    if [ -n "$UVM_AUTO_ACTIVATED" ] && [ -n "$VIRTUAL_ENV" ]; then
-        local should_deactivate=true
-        
-        if [ "$UVM_AUTO_ACTIVATED" = "local" ] && [ -n "$UVM_AUTO_ACTIVATED_PATH" ]; then
-            local venv_project_dir=$(dirname "$UVM_AUTO_ACTIVATED_PATH")
-            case "$PWD" in
-                "$venv_project_dir"*)
-                    should_deactivate=false
-                    ;;
-            esac
-        fi
-        
-        if [[ "$UVM_AUTO_ACTIVATED" == uvm:* ]] && [ -f ".uvmrc" ]; then
-            should_deactivate=false
-        fi
-        
-        if [ "$should_deactivate" = true ]; then
-            if command -v deactivate &> /dev/null; then
-                deactivate 2>/dev/null || true
-            fi
-            unset UVM_AUTO_ACTIVATED
-            unset UVM_AUTO_ACTIVATED_PATH
-        fi
-    fi
-}
-
-# Hook into cd command
-_uvm_original_cd=$(declare -f cd | tail -n +2)
-cd() {
-    builtin cd "$@"
-    local ret=$?
-    uvm_auto_activate
-    return $ret
-}
-
-# Also check on shell initialization
-uvm_auto_activate
-
-# Helper function to get environment path
-_uvm_get_env_path() {
+_uvm_hook_record_file_path() {
     local env_name="$1"
-    local uvm_envs_dir="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
-    local uvm_envs_file="${HOME}/.config/uvm/envs.json"
-    
-    # Try default path first
-    local default_path="${uvm_envs_dir}/${env_name}"
-    if [ -d "${default_path}" ]; then
-        echo "${default_path}"
+    printf '%s/%s.env\n' "$(uvm_get_env_records_dir)" "$env_name"
+}
+
+_uvm_hook_get_env_path() {
+    local env_name="$1"
+    local default_path
+    local record_file
+
+    uvm_shell_load_runtime_config
+    uvm_is_valid_env_name "$env_name" || return 1
+
+    record_file=$(_uvm_hook_record_file_path "$env_name")
+    if [ -f "$record_file" ]; then
+        unset UVM_RECORD_NAME UVM_RECORD_PATH UVM_RECORD_PYTHON UVM_RECORD_CREATED
+        # shellcheck source=/dev/null
+        source "$record_file"
+        if [ -n "${UVM_RECORD_PATH:-}" ] && uvm_is_valid_uv_env "$UVM_RECORD_PATH"; then
+            echo "$UVM_RECORD_PATH"
+            return 0
+        fi
+    fi
+
+    default_path="$(uvm_get_default_envs_dir)/${env_name}"
+    if uvm_is_valid_uv_env "$default_path"; then
+        echo "$default_path"
         return 0
     fi
-    
-    # Try to find in envs.json
-    if [ -f "${uvm_envs_file}" ]; then
-        local path=$(grep -o "\"name\":\"${env_name}\"[^}]*\"path\":\"[^\"]*\"" "${uvm_envs_file}" | grep -o "\"path\":\"[^\"]*\"" | cut -d'"' -f4)
-        if [ -n "$path" ] && [ -d "$path" ]; then
-            echo "$path"
-            return 0
-        fi
-    fi
-    
+
     return 1
 }
 
-# Make uvm commands available as shell functions
-uvm() {
-    if [ "$1" = "activate" ]; then
-        # Special handling for activate to work in current shell
-        shift
-        local env_name="$1"
-        
-        if [ -z "$env_name" ]; then
-            echo "Error: Environment name is required"
-            echo "Usage: uvm activate <env_name>"
-            return 1
+uvm_find_upward_file() {
+    local file_name="$1"
+    local current_dir="$PWD"
+    local depth=0
+
+    while [ -n "$current_dir" ] && [ "$current_dir" != "/" ] && [ "$depth" -lt 25 ]; do
+        if [ -f "${current_dir}/${file_name}" ]; then
+            printf '%s/%s\n' "$current_dir" "$file_name"
+            return 0
         fi
-        
-        # Get environment path
-        local env_path=$(_uvm_get_env_path "$env_name")
-        
-        if [ -z "$env_path" ]; then
-            echo "Error: Environment '$env_name' not found"
-            echo "Run 'uvm list' to see available environments"
-            return 1
-        fi
-        
-        local activate_script=""
-        if [ -f "$env_path/bin/activate" ]; then
-            activate_script="$env_path/bin/activate"
-        elif [ -f "$env_path/Scripts/activate" ]; then
-            activate_script="$env_path/Scripts/activate"
-        fi
-        
-        if [ -n "$activate_script" ]; then
-            source "$activate_script"
-            export UVM_ACTIVE_ENV="$env_name"
-            echo "✓ Environment '$env_name' activated"
-        else
-            echo "Error: Activate script not found"
-            return 1
-        fi
-    elif [ "$1" = "deactivate" ]; then
-        # Special handling for deactivate
-        if [ -n "$VIRTUAL_ENV" ] && command -v deactivate &> /dev/null; then
-            deactivate
-            unset UVM_ACTIVE_ENV
-            unset UVM_AUTO_ACTIVATED
-            unset UVM_AUTO_ACTIVATED_PATH
-            echo "✓ Environment deactivated"
-        else
-            echo "No active environment to deactivate"
-        fi
-    else
-        # Call the actual uvm binary for other commands
-        command uvm "$@"
-    fi
-}
-EOF
+        current_dir=$(dirname "$current_dir")
+        depth=$((depth + 1))
+    done
+
+    return 1
 }
 
+uvm_find_upward_local_env() {
+    local current_dir="$PWD"
+    local depth=0
+    local local_env
+
+    while [ -n "$current_dir" ] && [ "$current_dir" != "/" ] && [ "$depth" -lt 25 ]; do
+        local_env="${current_dir}/.venv"
+        if uvm_is_valid_uv_env "$local_env"; then
+            echo "$local_env"
+            return 0
+        fi
+        current_dir=$(dirname "$current_dir")
+        depth=$((depth + 1))
+    done
+
+    return 1
+}
+
+uvm_detect_auto_activation_target() {
+    local local_env
+    local uvmrc_file
+    local env_name
+    local env_path
+
+    unset UVM_AUTO_TARGET_PATH UVM_AUTO_TARGET_SOURCE UVM_AUTO_TARGET_ROOT
+    uvm_shell_load_runtime_config
+
+    local_env=$(uvm_find_upward_local_env || true)
+    if [ -n "$local_env" ]; then
+        UVM_AUTO_TARGET_PATH="$local_env"
+        UVM_AUTO_TARGET_SOURCE="local"
+        UVM_AUTO_TARGET_ROOT="$(dirname "$local_env")"
+        export UVM_AUTO_TARGET_PATH UVM_AUTO_TARGET_SOURCE UVM_AUTO_TARGET_ROOT
+        return 0
+    fi
+
+    uvmrc_file=$(uvm_find_upward_file ".uvmrc" || true)
+    if [ -n "$uvmrc_file" ]; then
+        env_name=$(tr -d '[:space:]' < "$uvmrc_file" | head -n 1)
+        if ! uvm_is_valid_env_name "$env_name"; then
+            echo "Warning: Invalid environment name in ${uvmrc_file}" >&2
+            return 0
+        fi
+
+        env_path=$(_uvm_hook_get_env_path "$env_name") || {
+            echo "Warning: Environment '${env_name}' referenced by ${uvmrc_file} was not found" >&2
+            return 0
+        }
+
+        UVM_AUTO_TARGET_PATH="$env_path"
+        UVM_AUTO_TARGET_SOURCE="uvm:${env_name}"
+        UVM_AUTO_TARGET_ROOT="$(dirname "$uvmrc_file")"
+        export UVM_AUTO_TARGET_PATH UVM_AUTO_TARGET_SOURCE UVM_AUTO_TARGET_ROOT
+    fi
+}
+
+uvm_auto_activate() {
+    local activate_script
+
+    uvm_detect_auto_activation_target
+
+    if [ -n "${UVM_AUTO_TARGET_PATH:-}" ]; then
+        if [ "${VIRTUAL_ENV:-}" != "$UVM_AUTO_TARGET_PATH" ]; then
+            if [ -n "${VIRTUAL_ENV:-}" ] && command -v deactivate >/dev/null 2>&1; then
+                deactivate >/dev/null 2>&1 || true
+            fi
+
+            activate_script=$(uvm_env_activate_script "$UVM_AUTO_TARGET_PATH") || return 0
+            # shellcheck source=/dev/null
+            source "$activate_script"
+            export UVM_AUTO_ACTIVATED="${UVM_AUTO_TARGET_SOURCE}"
+            export UVM_AUTO_ACTIVATED_PATH="$UVM_AUTO_TARGET_PATH"
+            export UVM_AUTO_PROJECT_ROOT="$UVM_AUTO_TARGET_ROOT"
+        fi
+        return 0
+    fi
+
+    if [ -n "${UVM_AUTO_ACTIVATED:-}" ] && [ -n "${VIRTUAL_ENV:-}" ]; then
+        if command -v deactivate >/dev/null 2>&1; then
+            deactivate >/dev/null 2>&1 || true
+        fi
+        unset UVM_AUTO_ACTIVATED
+        unset UVM_AUTO_ACTIVATED_PATH
+        unset UVM_AUTO_PROJECT_ROOT
+    fi
+}
+
+uvm_shell_activate() {
+    local env_name="$1"
+    local env_path
+    local activate_script
+
+    if [ -z "$env_name" ]; then
+        echo "Error: Environment name is required"
+        echo "Usage: uvm activate <env_name>"
+        return 1
+    fi
+
+    env_path=$(_uvm_hook_get_env_path "$env_name") || {
+        echo "Error: Environment '$env_name' not found"
+        echo "Run 'uvm list' or 'uvm repair' to refresh metadata."
+        return 1
+    }
+
+    activate_script=$(uvm_env_activate_script "$env_path") || {
+        echo "Error: Activate script not found"
+        return 1
+    }
+
+    # shellcheck source=/dev/null
+    source "$activate_script"
+    export UVM_ACTIVE_ENV="$env_name"
+    unset UVM_AUTO_ACTIVATED
+    unset UVM_AUTO_ACTIVATED_PATH
+    unset UVM_AUTO_PROJECT_ROOT
+    echo "Environment '$env_name' activated"
+}
+
+uvm_shell_deactivate() {
+    if [ -n "${VIRTUAL_ENV:-}" ] && command -v deactivate >/dev/null 2>&1; then
+        deactivate
+        unset UVM_ACTIVE_ENV
+        unset UVM_AUTO_ACTIVATED
+        unset UVM_AUTO_ACTIVATED_PATH
+        unset UVM_AUTO_PROJECT_ROOT
+        echo "Environment deactivated"
+        return 0
+    fi
+
+    echo "No active environment to deactivate"
+}
+
+uvm_setup_prompt_hook() {
+    if [ -n "${ZSH_VERSION:-}" ]; then
+        if autoload -U add-zsh-hook >/dev/null 2>&1; then
+            add-zsh-hook chpwd uvm_auto_activate
+            add-zsh-hook precmd uvm_auto_activate
+        else
+            chpwd_functions+=("uvm_auto_activate")
+            precmd_functions+=("uvm_auto_activate")
+        fi
+        return 0
+    fi
+
+    if [ -n "${BASH_VERSION:-}" ]; then
+        case ";${PROMPT_COMMAND:-};" in
+            *";uvm_auto_activate;"*)
+                ;;
+            *)
+                PROMPT_COMMAND="uvm_auto_activate${PROMPT_COMMAND:+;${PROMPT_COMMAND}}"
+                ;;
+        esac
+    fi
+}
+
+uvm_generate_shell_hook() {
+    cat <<EOF
+# UVM shell hook
+$(declare -f uvm_get_home)
+$(declare -f uvm_get_config_file)
+$(declare -f uvm_get_default_envs_dir)
+$(declare -f uvm_get_env_records_dir)
+$(declare -f uvm_is_valid_env_name)
+$(declare -f uvm_env_activate_script)
+$(declare -f uvm_is_valid_uv_env)
+$(declare -f uvm_shell_load_runtime_config)
+$(declare -f _uvm_hook_record_file_path)
+$(declare -f _uvm_hook_get_env_path)
+$(declare -f uvm_find_upward_file)
+$(declare -f uvm_find_upward_local_env)
+$(declare -f uvm_detect_auto_activation_target)
+$(declare -f uvm_auto_activate)
+$(declare -f uvm_shell_activate)
+$(declare -f uvm_shell_deactivate)
+$(declare -f uvm_setup_prompt_hook)
+
+uvm() {
+    if [ "\$1" = "activate" ]; then
+        shift
+        uvm_shell_activate "\$@"
+    elif [ "\$1" = "deactivate" ]; then
+        shift
+        uvm_shell_deactivate "\$@"
+    else
+        command uvm "\$@"
+    fi
+}
+
+uvm_setup_prompt_hook
+uvm_auto_activate
+EOF
+}

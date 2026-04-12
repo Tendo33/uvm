@@ -5,6 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-04-12
+
+### Changed
+- Reworked metadata storage to managed record files under `envs.d/`
+- Added `uvm doctor` and `uvm repair`
+- Hardened environment name validation and delete-path safety checks
+- Switched shell integration and mirror configuration to managed block updates
+- Rebuilt install/uninstall flows around the shared configuration layer
+- Added Windows Git Bash smoke coverage in CI
+
+---
+
 ## [1.0.5] - 2026-02-25
 
 ### 修复
@@ -135,6 +147,7 @@
 
 ---
 
+[1.1.0]: https://github.com/Tendo33/uvm/releases/tag/v1.1.0
 [1.0.5]: https://github.com/Tendo33/uvm/releases/tag/v1.0.5
 [1.0.4]: https://github.com/Tendo33/uvm/releases/tag/v1.0.4
 [1.0.3]: https://github.com/Tendo33/uvm/releases/tag/v1.0.3

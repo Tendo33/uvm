@@ -1,422 +1,252 @@
-# 🗑️ UVM 卸载指南
+# UVM 卸载指南
 
-本文档提供了完整的 UVM 卸载说明和常见问题解答。
-
----
-
-## 📋 目录
-
-- [快速卸载](#快速卸载)
-- [卸载选项](#卸载选项)
-- [卸载内容](#卸载内容)
-- [保留内容](#保留内容)
-- [手动卸载](#手动卸载)
-- [常见问题](#常见问题)
+本文档说明当前版本 `uninstall.sh` 的真实行为、保留项、可选参数以及手动清理方法。以下内容已对齐 `1.1.0` 的卸载实现。
 
 ---
 
-## 🚀 快速卸载
+## 1. 快速卸载
 
-### 推荐方式：先下载后执行
-
-为了交互式确认能正常工作，请先下载脚本再执行：
+推荐先下载脚本，再执行：
 
 ```bash
-# 下载卸载脚本
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/uninstall.sh -o uninstall.sh
-
-# 执行卸载（交互式确认）
 bash uninstall.sh
-
-# 卸载完成后删除脚本
 rm uninstall.sh
 ```
 
-### 本地方式
-
-如果已克隆仓库：
+如果你是在仓库本地执行：
 
 ```bash
 cd /path/to/uvm
-./uninstall.sh
-```
-
-**卸载过程：**
-
-```
-╔════════════════════════════════════════════════════════════╗
-║                  UVM Uninstaller v1.0.0                    ║
-║          UV Manager - Conda-like Environment Manager       ║
-╚════════════════════════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 The following will be removed:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ✓ Binary: /home/user/.local/bin/uvm
-  ✓ Library: /home/user/.local/lib/uvm
-  ✓ Config: /home/user/.config/uvm
-  ✓ Shell integration from: /home/user/.bashrc
-
-⚠ Your virtual environments will NOT be removed
-ℹ Environments location: /home/user/uv_envs
-  (You can manually delete this directory if needed)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Do you want to continue? (y/N): y
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🗑️  Uninstalling uvm...
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-✓ Backed up shell config to: /home/user/.bashrc.uvm-backup-20231226-143022
-✓ Removed uvm configuration from shell RC file
-
-✓ Removed: /home/user/.local/bin/uvm
-✓ Removed: /home/user/.local/lib/uvm
-✓ Removed: /home/user/.config/uvm
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✓ uvm has been uninstalled successfully!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📝 Next Steps:
-
-   1. Reload your shell configuration:
-      source ~/.bashrc  # or ~/.zshrc
-
-   2. Your shell config backup is saved at:
-      /home/user/.bashrc.uvm-backup-20231226-143022
-
-   3. Your virtual environments are still at:
-      /home/user/uv_envs
-
-      To remove them (optional):
-      rm -rf /home/user/uv_envs
-
-💡 To reinstall uvm later:
-   git clone https://github.com/Tendo33/uvm.git
-   cd uvm && ./install.sh
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+bash uninstall.sh
 ```
 
 ---
 
-## ⚙️ 卸载选项
+## 2. 可选参数
 
-### 强制卸载（跳过确认）
+### `--force`
+
+跳过确认提示：
 
 ```bash
-./uninstall.sh --force
-# 或
-./uninstall.sh -f
+bash uninstall.sh --force
 ```
 
 适用场景：
+
 - 自动化脚本
-- 确定要卸载，不需要确认提示
+- CI 清理
+- 已确认要卸载，不需要交互确认
 
-### 保留 Shell 配置
+### `--keep-shell-config`
+
+保留 shell 配置中的 `uvm` 受管 block：
 
 ```bash
-./uninstall.sh --keep-shell-config
+bash uninstall.sh --keep-shell-config
 ```
 
 适用场景：
-- 临时卸载，稍后会重新安装
-- 想保留 `eval "$(uvm shell-hook)"` 配置
 
-### 查看帮助
+- 只想移除二进制和库文件
+- 准备稍后重新安装
+- 想暂时保留 shell hook 与 PATH 配置
+
+---
+
+## 3. 卸载时会删除什么
+
+默认会删除以下内容：
+
+- `~/.local/bin/uvm`
+- `~/.local/lib/uvm`
+- `~/.config/uvm`
+- shell rc 中由 `uvm` 管理的受管 block
+
+shell block 是按起止标记精确删除的，而不是删除所有包含 `uvm` 的行。
+
+受管标记示例：
 
 ```bash
-./uninstall.sh --help
+# >>> uvm path >>>
+export PATH="${HOME}/.local/bin:$PATH"
+# <<< uvm path <<<
+
+# >>> uvm shell >>>
+eval "$(uvm shell-hook)"
+# <<< uvm shell <<<
 ```
 
 ---
 
-## 📦 卸载内容
+## 4. 卸载时会保留什么
 
-卸载脚本会删除以下内容：
+默认会保留以下内容：
 
-| 项目 | 路径 | 说明 |
-|------|------|------|
-| **UVM 二进制文件** | `~/.local/bin/uvm` | 主执行文件 |
-| **UVM 库文件** | `~/.local/lib/uvm/` | 核心功能库 |
-| **UVM 配置** | `~/.config/uvm/` | 配置文件和元数据 |
-| **Shell 集成** | `~/.bashrc` 或 `~/.zshrc` | `eval "$(uvm shell-hook)"` 相关行 |
+- 你的虚拟环境目录
+- `uv`
+- `~/.config/uv/uv.toml`
 
-### 🔒 自动备份
+说明：
 
-卸载前会自动备份您的 Shell 配置文件：
+- `uvm` 不会主动删除你创建的环境目录
+- `uvm` 也不会删除 `uv` 本体
+- `uv` 的配置文件不会被卸载脚本清理
 
+---
+
+## 5. 卸载流程说明
+
+当前版本的卸载流程大致如下：
+
+1. 检测并展示待删除项
+2. 解析当前 shell 对应的 rc 文件
+3. 若未使用 `--keep-shell-config`，先备份 shell rc
+4. 按受管 block 起止标记删除 `uvm` 写入内容
+5. 删除二进制、库目录和 `~/.config/uvm`
+6. 输出保留项与后续建议
+
+这一流程已经修复了旧版在 `set -e` 下可能提前中断的问题。
+
+---
+
+## 6. shell 配置备份
+
+如果 shell rc 文件存在，卸载前会自动创建备份，文件名类似：
+
+```text
+~/.bashrc.uvm-backup-20260412-101530
 ```
-~/.bashrc.uvm-backup-20231226-143022
-```
 
-如果卸载后发现问题，可以恢复：
+如果卸载后你想恢复原文件，可以手动执行：
 
 ```bash
-cp ~/.bashrc.uvm-backup-20231226-143022 ~/.bashrc
+cp ~/.bashrc.uvm-backup-20260412-101530 ~/.bashrc
 source ~/.bashrc
 ```
 
 ---
 
-## 💾 保留内容
+## 7. 卸载后的建议动作
 
-以下内容**不会**被删除：
+卸载完成后，建议：
 
-### ✅ 虚拟环境目录
+1. 重新加载 shell 配置
+2. 确认 `uvm` 命令已不可用
+3. 如无需要，再手动清理虚拟环境目录
 
-```
-~/uv_envs/  （或您自定义的目录）
-```
-
-**原因：** 您的项目环境和已安装的包都在这里，删除可能导致数据丢失。
-
-**如需删除：**
+示例：
 
 ```bash
-# 查看环境目录位置
-ls -lh ~/uv_envs
-
-# 确认后删除
-rm -rf ~/uv_envs
-```
-
-### ✅ UV 本身
-
-UV 是独立的工具，不会被卸载。
-
-**如需卸载 UV：**
-
-```bash
-# Linux/macOS
-rm -rf ~/.cargo/bin/uv ~/.local/bin/uv
-
-# 或者使用 rustup（如果通过 cargo 安装）
-cargo uninstall uv
-```
-
-### ✅ UV 配置文件
-
-```
-~/.config/uv/uv.toml
-```
-
-这是 UV 的镜像配置，不属于 UVM。
-
-**如需删除：**
-
-```bash
-rm ~/.config/uv/uv.toml
-```
-
----
-
-## 🔧 手动卸载
-
-如果卸载脚本不可用，可以手动删除：
-
-### Linux / macOS
-
-```bash
-# 1. 删除 UVM 文件
-rm -f ~/.local/bin/uvm
-rm -rf ~/.local/lib/uvm
-rm -rf ~/.config/uvm
-
-# 2. 编辑 Shell 配置文件
-nano ~/.bashrc  # 或 ~/.zshrc
-
-# 删除包含 "uvm" 的行，例如：
-# eval "$(uvm shell-hook)"
-# export PATH="$HOME/.local/bin:$PATH"  # 如果只用于 uvm
-
-# 3. 重新加载 Shell
-source ~/.bashrc
-
-# 4. 验证卸载
-which uvm  # 应该显示 "not found"
-```
-
-### Windows (Git Bash)
-
-```bash
-# 1. 删除 UVM 文件
-rm -f ~/.local/bin/uvm
-rm -rf ~/.local/lib/uvm
-rm -rf ~/.config/uvm
-
-# 2. 编辑 .bashrc
-nano ~/.bashrc
-
-# 删除包含 "uvm" 的行
-
-# 3. 重新加载
-source ~/.bashrc
-
-# 4. 验证
+source ~/.bashrc   # 或 ~/.zshrc
 which uvm
 ```
 
 ---
 
-## ❓ 常见问题
+## 8. 手动清理方法
 
-### Q1: 卸载后还能使用 `uv` 命令吗？
-
-**A:** 可以！`uv` 是独立的工具，卸载 UVM 不影响 `uv` 的使用。
+如果你不想使用脚本，也可以手动清理：
 
 ```bash
-uv --version  # 仍然可用
+rm -f ~/.local/bin/uvm
+rm -rf ~/.local/lib/uvm
+rm -rf ~/.config/uvm
 ```
 
-### Q2: 卸载后我的虚拟环境还在吗？
-
-**A:** 是的，虚拟环境不会被删除。您可以继续使用标准方式激活：
+然后编辑对应 shell rc 文件，删除以下受管 block：
 
 ```bash
-source ~/uv_envs/myenv/bin/activate
+# >>> uvm path >>>
+export PATH="${HOME}/.local/bin:$PATH"
+# <<< uvm path <<<
+
+# >>> uvm shell >>>
+eval "$(uvm shell-hook)"
+# <<< uvm shell <<<
 ```
 
-### Q3: 如何完全清理所有相关文件？
+注意：
 
-**A:** 运行卸载脚本后，手动删除环境目录和 UV 配置：
+- 只删除这两个 block，不要粗暴删除所有包含 `uvm` 的行
+- 如果你还在其他地方手写过 `uvm` 相关配置，需要自行判断是否保留
+
+---
+
+## 9. 如果还想删除虚拟环境
+
+卸载 `uvm` 后，环境目录仍然会保留。确认不再需要时，你可以手动删除：
 
 ```bash
-# 卸载 UVM
-./uninstall.sh --force
-
-# 删除虚拟环境
 rm -rf ~/uv_envs
-
-# 删除 UV 配置（可选）
-rm -rf ~/.config/uv
-
-# 卸载 UV（可选）
-rm -rf ~/.cargo/bin/uv ~/.local/bin/uv
 ```
 
-### Q4: 卸载后如何重新安装？
-
-**A:** 重新运行安装脚本：
-
-```bash
-cd /path/to/uvm
-./install.sh
-```
-
-如果您保留了环境目录，重新安装后可以继续使用原有环境。
-
-### Q5: 卸载时提示 "No uvm installation found"？
-
-**A:** 这表示 UVM 已经被卸载或从未安装。您可以：
-
-```bash
-# 检查是否有残留文件
-ls -la ~/.local/bin/uvm
-ls -la ~/.local/lib/uvm
-ls -la ~/.config/uvm
-
-# 如果有，手动删除
-rm -rf ~/.local/bin/uvm ~/.local/lib/uvm ~/.config/uvm
-```
-
-### Q6: 卸载后 Shell 配置文件损坏了怎么办？
-
-**A:** 使用自动备份恢复：
-
-```bash
-# 查找备份文件
-ls -la ~/.bashrc.uvm-backup-*
-
-# 恢复最新的备份
-cp ~/.bashrc.uvm-backup-20231226-143022 ~/.bashrc
-
-# 重新加载
-source ~/.bashrc
-```
-
-### Q7: 可以只删除 Shell 集成，保留 UVM 吗？
-
-**A:** 可以，手动编辑 Shell 配置文件：
-
-```bash
-nano ~/.bashrc
-
-# 删除或注释这一行：
-# eval "$(uvm shell-hook)"
-
-# 保存后重新加载
-source ~/.bashrc
-```
-
-这样 `uvm` 命令仍然可用，但不会自动激活环境。
-
-### Q8: 卸载脚本会删除我的项目代码吗？
-
-**A:** 不会！卸载脚本只删除 UVM 自身的文件，不会触及：
-- 您的项目代码
-- 虚拟环境目录
-- 任何用户数据
+如果你安装时使用了自定义 `UVM_ENVS_DIR`，请删除对应目录，而不是默认写死删除 `~/uv_envs`。
 
 ---
 
-## 🔄 卸载后重新安装
+## 10. 如果还想删除 `uv`
 
-如果您改变主意，随时可以重新安装：
+`uvm` 不会卸载 `uv`。如需删除，请按你自己的 `uv` 安装方式处理。
+
+例如：
 
 ```bash
-# 1. 进入 UVM 源码目录
-cd /path/to/uvm
+uv --version
+```
 
-# 2. 运行安装脚本
-./install.sh
+确认不需要后，再按照 `uv` 官方安装方式对应的卸载方法执行。
 
-# 3. 如果您保留了环境目录，原有环境会自动识别
-uvm list
+---
+
+## 11. 常见问题
+
+### 卸载会删除我的虚拟环境吗？
+
+不会。`uninstall.sh` 只删除 `uvm` 本身及其受管配置，不删除你的环境目录。
+
+### 卸载会删除 `uv.toml` 吗？
+
+不会。`~/.config/uv/uv.toml` 会被保留。
+
+### 卸载会破坏我的 shell rc 吗？
+
+当前版本会先备份，再删除受管 block。它不再使用旧版那种按关键字粗暴过滤的方式，因此风险明显更低。
+
+### `--keep-shell-config` 是做什么的？
+
+它会保留 shell rc 中由 `uvm` 写入的 PATH 与 shell hook block，仅删除 `uvm` 二进制、库与配置目录。
+
+### 卸载后还能继续手动使用已有环境吗？
+
+可以。只要环境目录还在，你依然可以用标准方式手动激活：
+
+```bash
+source /path/to/env/bin/activate
 ```
 
 ---
 
-## 📞 需要帮助？
+## 12. 卸载检查清单
 
-如果卸载过程中遇到问题：
+卸载完成后，可按下面清单检查：
 
-1. **查看日志：** 卸载脚本会显示详细的操作信息
-2. **检查备份：** Shell 配置文件会自动备份
-3. **手动清理：** 参考 [手动卸载](#手动卸载) 章节
-4. **提交 Issue：** 在 GitHub 上报告问题
-
----
-
-## 📝 卸载检查清单
-
-完成卸载后，验证以下项目：
-
-- [ ] `which uvm` 返回 "not found"
-- [ ] `~/.local/bin/uvm` 不存在
-- [ ] `~/.local/lib/uvm` 不存在
-- [ ] `~/.config/uvm` 不存在
-- [ ] Shell 配置文件中没有 `uvm` 相关行
-- [ ] 新开终端不会加载 UVM
-- [ ] （可选）虚拟环境目录已删除
-- [ ] （可选）UV 配置已删除
+- `which uvm` 不再返回可执行路径
+- `~/.local/bin/uvm` 已不存在
+- `~/.local/lib/uvm` 已不存在
+- `~/.config/uvm` 已不存在
+- shell rc 中的 `uvm` 受管 block 已按预期移除
+- 你的环境目录仍保留
+- `uv` 仍可独立工作
 
 ---
 
-## 💡 提示
+## 13. 与旧版行为的区别
 
-- **卸载前备份：** 如果不确定，先备份重要的虚拟环境
-- **保留环境：** 卸载 UVM 不会影响虚拟环境的使用
-- **清理空间：** 如果磁盘空间紧张，记得删除不需要的环境目录
-- **重新安装：** 卸载后可以随时重新安装，不会丢失数据
+相较旧版，当前卸载实现有几个关键变化：
 
----
-
-**感谢使用 UVM！** 🙏
-
-如果您有任何反馈或建议，欢迎在 GitHub 上提交 Issue 或 Pull Request。
-
+- 不再通过 `grep -v "uvm"` 这类方式删除 shell 配置
+- 不再因为“删除了文件就返回非零值”而在 `set -e` 下提前退出
+- 受管 block 可重复安装、修复、升级、卸载，行为更稳定
+- 会明确保留环境目录与 `uv` 配置，减少误删风险

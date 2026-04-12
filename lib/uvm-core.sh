@@ -1,17 +1,43 @@
 #!/bin/bash
 
-# 加载配置模块
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/uvm-config.sh
 source "${SCRIPT_DIR}/uvm-config.sh"
 
-# 创建虚拟环境
+uvm_env_is_safe_delete_target() {
+    local env_name="$1"
+    local env_path="$2"
+    local default_root
+    local resolved_default
+    local resolved_path
+
+    if uvm_load_env_record "$env_name" && [ "${UVM_RECORD_PATH}" = "$env_path" ]; then
+        return 0
+    fi
+
+    default_root=$(uvm_get_default_envs_dir)
+    resolved_default=$(uvm_resolve_existing_path "$default_root") || return 1
+    resolved_path=$(uvm_resolve_existing_path "$env_path") || return 1
+
+    case "${resolved_path}/" in
+        "${resolved_default}/"*)
+            [ "$(basename "$resolved_path")" = "$env_name" ]
+            return $?
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 uvm_create() {
     local env_name=""
     local python_version=""
     local custom_path=""
-    
-    # 解析参数
+    local env_path=""
+    local actual_python_version=""
+    local existing_env_path=""
+
     while [ $# -gt 0 ]; do
         case "$1" in
             --python)
@@ -37,139 +63,118 @@ uvm_create() {
                 ;;
         esac
     done
-    
-    # 检查环境名称
+
     if [ -z "$env_name" ]; then
         echo "Error: Environment name is required"
         echo "Usage: uvm create <env_name> [--python VERSION] [--path PATH]"
         return 1
     fi
-    
-    # 检查 uv 是否安装
-    if ! command -v uv &> /dev/null; then
-        echo "Error: 'uv' is not installed. Please install it first."
-        echo "Visit: https://github.com/astral-sh/uv"
+
+    if ! uvm_is_valid_env_name "$env_name"; then
+        echo "Error: Invalid environment name"
+        echo "Allowed characters: letters, numbers, dot, underscore, hyphen"
         return 1
     fi
-    
-    # 确定环境路径
-    local uvm_envs_dir="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
-    local env_path="${custom_path:-${uvm_envs_dir}/${env_name}}"
-    
-    # 检查环境是否已存在
-    if [ -d "$env_path" ]; then
+
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "Error: 'uv' is not installed."
+        echo "Run 'uvm repair' after installing uv to refresh the setup."
+        return 1
+    fi
+
+    init_uvm_config || return 1
+    existing_env_path=$(get_env_path "$env_name" 2>/dev/null || true)
+    if [ -n "$existing_env_path" ]; then
+        echo "Error: Environment '${env_name}' is already managed at: ${existing_env_path}"
+        return 1
+    fi
+
+    if [ -n "$custom_path" ]; then
+        env_path="$custom_path"
+        mkdir -p "$(dirname "$env_path")" || return 1
+    else
+        env_path="$(uvm_get_default_envs_dir)/${env_name}"
+        mkdir -p "$(uvm_get_default_envs_dir)" || return 1
+    fi
+
+    if [ -e "$env_path" ]; then
         echo "Error: Environment '${env_name}' already exists at: ${env_path}"
         return 1
     fi
-    
-    # 创建环境目录（如果使用默认路径）
-    if [ -z "$custom_path" ]; then
-        mkdir -p "$uvm_envs_dir"
-    fi
-    
-    # 调用 uv venv 创建环境
+
     echo "Creating environment '${env_name}'..."
     if [ -n "$python_version" ]; then
         echo "  Python version: ${python_version}"
-        uv venv "$env_path" --python "$python_version"
+        uv venv "$env_path" --python "$python_version" || return 1
     else
-        uv venv "$env_path"
+        uv venv "$env_path" || return 1
     fi
-    
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to create environment"
-        return 1
-    fi
-    
-    # 获取 Python 版本
-    local actual_python_version=""
-    if [ -f "${env_path}/bin/python" ]; then
-        actual_python_version=$("${env_path}/bin/python" --version 2>&1 | cut -d' ' -f2)
-    elif [ -f "${env_path}/Scripts/python.exe" ]; then
-        # Windows Git Bash
-        actual_python_version=$("${env_path}/Scripts/python.exe" --version 2>&1 | cut -d' ' -f2)
-    fi
-    
-    # 记录环境元数据
-    add_env_record "$env_name" "$env_path" "$actual_python_version"
-    
-    echo "✓ Environment '${env_name}' created successfully"
+
+    actual_python_version=$(get_env_python_version "$env_path")
+    add_env_record "$env_name" "$env_path" "$actual_python_version" || return 1
+
+    echo "Environment '${env_name}' created successfully"
     echo "  Location: ${env_path}"
     echo "  Python: ${actual_python_version}"
     echo ""
-    echo "To activate: uvm activate ${env_name}"
+    echo "Next step:"
+    echo "  Run 'uvm activate ${env_name}' after enabling shell integration."
 }
 
-# 激活虚拟环境
 uvm_activate() {
     local env_name="$1"
-    
+    local env_path
+    local activate_script
+
     if [ -z "$env_name" ]; then
         echo "Error: Environment name is required"
         echo "Usage: uvm activate <env_name>"
         return 1
     fi
-    
-    # 查找环境路径
-    local env_path
-    env_path=$(get_env_path "$env_name")
-    
-    if [ -z "$env_path" ]; then
+
+    env_path=$(get_env_path "$env_name") || {
         echo "Error: Environment '${env_name}' not found"
-        echo "Run 'uvm list' to see available environments"
+        echo "Run 'uvm list' to inspect known environments or 'uvm repair' to rebuild metadata."
         return 1
-    fi
-    
-    # 检查激活脚本
-    local activate_script=""
-    if [ -f "${env_path}/bin/activate" ]; then
-        activate_script="${env_path}/bin/activate"
-    elif [ -f "${env_path}/Scripts/activate" ]; then
-        # Windows Git Bash
-        activate_script="${env_path}/Scripts/activate"
-    else
+    }
+
+    activate_script=$(uvm_env_activate_script "$env_path") || {
         echo "Error: Activate script not found in: ${env_path}"
         return 1
-    fi
-    
-    # 激活环境
-    echo "Activating environment '${env_name}'..."
+    }
+
     # shellcheck source=/dev/null
     source "$activate_script"
-    
-    if [ $? -eq 0 ]; then
-        export UVM_ACTIVE_ENV="$env_name"
-        echo "✓ Environment '${env_name}' activated"
-    else
-        echo "Error: Failed to activate environment"
-        return 1
-    fi
+    export UVM_ACTIVE_ENV="$env_name"
+    echo "Environment '${env_name}' activated"
 }
 
-# 停用虚拟环境
 uvm_deactivate() {
-    if [ -z "$VIRTUAL_ENV" ]; then
+    if [ -z "${VIRTUAL_ENV:-}" ]; then
         echo "No active environment to deactivate"
         return 0
     fi
-    
-    if command -v deactivate &> /dev/null; then
+
+    if command -v deactivate >/dev/null 2>&1; then
         deactivate
         unset UVM_ACTIVE_ENV
         unset UVM_AUTO_ACTIVATED
-        echo "✓ Environment deactivated"
-    else
-        echo "Error: deactivate command not found"
-        return 1
+        unset UVM_AUTO_ACTIVATED_PATH
+        unset UVM_AUTO_PROJECT_ROOT
+        echo "Environment deactivated"
+        return 0
     fi
+
+    echo "Error: deactivate command not found"
+    return 1
 }
 
-# 删除虚拟环境
 uvm_delete() {
-    local env_name="$1"
+    local env_name=""
     local force=false
-    
-    # 解析参数
+    local env_path
+    local response
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -f|--force)
@@ -188,62 +193,81 @@ uvm_delete() {
                 ;;
         esac
     done
-    
+
     if [ -z "$env_name" ]; then
         echo "Error: Environment name is required"
         echo "Usage: uvm delete <env_name> [-f|--force]"
         return 1
     fi
-    
-    # 查找环境路径
-    local env_path
-    env_path=$(get_env_path "$env_name")
-    
-    if [ -z "$env_path" ]; then
+
+    if ! uvm_is_valid_env_name "$env_name"; then
+        echo "Error: Invalid environment name"
+        return 1
+    fi
+
+    env_path=$(get_env_path "$env_name") || {
         echo "Error: Environment '${env_name}' not found"
+        echo "Run 'uvm list' or 'uvm repair' to refresh managed environments."
+        return 1
+    }
+
+    if [ "${VIRTUAL_ENV:-}" = "$env_path" ]; then
+        echo "Error: Cannot delete the active environment. Run 'uvm deactivate' first."
         return 1
     fi
-    
-    # 检查是否正在使用
-    if [ "$VIRTUAL_ENV" = "$env_path" ]; then
-        echo "Error: Cannot delete active environment. Deactivate it first."
+
+    if ! uvm_env_is_safe_delete_target "$env_name" "$env_path"; then
+        echo "Error: Refusing to delete unmanaged path: ${env_path}"
         return 1
     fi
-    
-    # 确认删除
+
     if [ "$force" = false ]; then
-        echo "Are you sure you want to delete '${env_name}'? (y/N)"
+        printf "Delete '%s' at '%s'? (y/N): " "$env_name" "$env_path"
         read -r response
         if [[ ! "$response" =~ ^[Yy]$ ]]; then
             echo "Deletion cancelled"
             return 0
         fi
     fi
-    
-    # 删除环境目录
-    echo "Deleting environment '${env_name}'..."
-    rm -rf "$env_path"
-    
-    if [ $? -eq 0 ]; then
-        # 删除元数据记录
-        remove_env_record "$env_name"
-        echo "✓ Environment '${env_name}' deleted successfully"
-    else
-        echo "Error: Failed to delete environment"
+
+    rm -rf "$env_path" || {
+        echo "Error: Failed to delete environment directory"
         return 1
+    }
+    remove_env_record "$env_name" || return 1
+
+    echo "Environment '${env_name}' deleted successfully"
+}
+
+uvm_print_env_entry() {
+    local env_name="$1"
+    local env_path="$2"
+    local python_version="$3"
+    local source_label="$4"
+    local marker="  "
+
+    if [ "${VIRTUAL_ENV:-}" = "$env_path" ]; then
+        marker="* "
+    fi
+
+    if [ "${UVM_LIST_SHOW_ALL:-false}" = true ]; then
+        printf "%s%-20s Python %-10s %-10s %s\n" "$marker" "$env_name" "${python_version:-unknown}" "$source_label" "$env_path"
+    else
+        printf "%s%-20s Python %-10s %s\n" "$marker" "$env_name" "${python_version:-unknown}" "$env_path"
     fi
 }
 
-# 列出所有虚拟环境
 uvm_list() {
-    local uvm_envs_dir="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
-    local _show_all=false
-    
-    # 解析参数
+    local seen_names=""
+    local env_name
+    local env_path
+    local env_dir
+
+    UVM_LIST_SHOW_ALL=false
     while [ $# -gt 0 ]; do
         case "$1" in
             -a|--all)
-                _show_all=true
+                UVM_LIST_SHOW_ALL=true
                 shift
                 ;;
             *)
@@ -252,122 +276,161 @@ uvm_list() {
                 ;;
         esac
     done
-    
+
+    init_uvm_config || return 1
     echo "Available environments:"
     echo ""
-    
-    local found_any=false
-    
-    # 列出默认目录中的环境
-    if [ -d "$uvm_envs_dir" ]; then
-        for env_dir in "$uvm_envs_dir"/*; do
-            if [ -d "$env_dir" ]; then
-                local env_name
-                env_name=$(basename "$env_dir")
-                
-                # 检查是否是有效的虚拟环境
-                local activate_script=""
-                if [ -f "${env_dir}/bin/activate" ]; then
-                    activate_script="${env_dir}/bin/activate"
-                elif [ -f "${env_dir}/Scripts/activate" ]; then
-                    activate_script="${env_dir}/Scripts/activate"
-                fi
-                
-                if [ -n "$activate_script" ]; then
-                    found_any=true
-                    
-                    # 获取 Python 版本
-                    local python_version="unknown"
-                    if [ -f "${env_dir}/bin/python" ]; then
-                        python_version=$("${env_dir}/bin/python" --version 2>&1 | cut -d' ' -f2)
-                    elif [ -f "${env_dir}/Scripts/python.exe" ]; then
-                        python_version=$("${env_dir}/Scripts/python.exe" --version 2>&1 | cut -d' ' -f2)
-                    fi
-                    
-                    # 标记当前激活的环境
-                    local marker="  "
-                    if [ "$VIRTUAL_ENV" = "$env_dir" ]; then
-                        marker="* "
-                    fi
-                    
-                    printf "${marker}%-25s Python %-10s %s\n" "$env_name" "$python_version" "$env_dir"
-                fi
+
+    for env_name in $(uvm_list_record_names); do
+        if uvm_load_env_record "$env_name" && uvm_is_valid_uv_env "$UVM_RECORD_PATH"; then
+            uvm_print_env_entry "$env_name" "$UVM_RECORD_PATH" "${UVM_RECORD_PYTHON}" "managed"
+            seen_names="${seen_names}
+${env_name}"
+        fi
+    done
+
+    if [ -d "$(uvm_get_default_envs_dir)" ]; then
+        for env_dir in "$(uvm_get_default_envs_dir)"/*; do
+            [ -d "$env_dir" ] || continue
+            env_name=$(basename "$env_dir")
+            if printf '%s\n' "$seen_names" | grep -Fxq "$env_name"; then
+                continue
+            fi
+            if ! uvm_is_valid_env_name "$env_name"; then
+                continue
+            fi
+            if uvm_is_valid_uv_env "$env_dir"; then
+                uvm_print_env_entry "$env_name" "$env_dir" "$(get_env_python_version "$env_dir")" "discovered"
+                seen_names="${seen_names}
+${env_name}"
             fi
         done
     fi
-    
-    if [ "$found_any" = false ]; then
+
+    if [ -z "${seen_names#?}" ]; then
         echo "  No environments found"
         echo ""
         echo "Create one with: uvm create <env_name>"
     fi
-    
+
     echo ""
 }
 
-# 显示帮助信息
+uvm_doctor() {
+    local shell_rc
+    local hook_status="missing"
+    local uv_status="missing"
+    local path_status="missing"
+    local mirror_status="missing"
+
+    init_uvm_config || return 1
+    shell_rc=$(get_shell_rc_file)
+
+    if uvm_is_shell_hook_configured "$shell_rc"; then
+        hook_status="configured"
+    fi
+
+    if command -v uv >/dev/null 2>&1; then
+        uv_status="$(uv --version 2>&1 | head -n 1)"
+    fi
+
+    case ":${PATH}:" in
+        *":${HOME}/.local/bin:"*)
+            path_status="present"
+            ;;
+        *)
+            path_status="missing"
+            ;;
+    esac
+
+    if uvm_file_contains_managed_block \
+        "$(uvm_get_uv_config_file)" \
+        "$(uvm_get_mirror_start_marker)" \
+        "$(uvm_get_mirror_end_marker)"; then
+        mirror_status="configured"
+    fi
+
+    echo "UVM doctor"
+    echo "----------"
+    echo "Platform          : $(uvm_detect_platform)"
+    echo "Shell             : $(detect_shell)"
+    echo "Shell RC          : ${shell_rc}"
+    echo "Shell hook        : ${hook_status}"
+    echo "UVM_HOME          : $(uvm_get_home)"
+    echo "UVM_ENVS_DIR      : $(uvm_get_default_envs_dir)"
+    echo "Metadata records  : $(uvm_count_metadata_records)"
+    echo "PATH ~/.local/bin : ${path_status}"
+    echo "UV                : ${uv_status}"
+    echo "Mirror block      : ${mirror_status}"
+    if [ -n "${VIRTUAL_ENV:-}" ]; then
+        echo "Active environment: ${VIRTUAL_ENV}"
+    else
+        echo "Active environment: none"
+    fi
+    if [ -n "${UVM_AUTO_ACTIVATED:-}" ]; then
+        echo "Auto activated    : ${UVM_AUTO_ACTIVATED}"
+    else
+        echo "Auto activated    : no"
+    fi
+}
+
+uvm_repair() {
+    local shell_rc
+    local registered_count
+
+    init_uvm_config || return 1
+    uvm_prune_invalid_records || return 1
+    registered_count=$(scan_and_register_envs "$(uvm_get_default_envs_dir)") || return 1
+
+    shell_rc=$(get_shell_rc_file)
+    uvm_ensure_shell_hook_configured "$shell_rc" || return 1
+    setup_uv_mirror || return 1
+
+    echo "Repair complete"
+    echo "  Shell hook file : ${shell_rc}"
+    echo "  Managed records : $(uvm_count_metadata_records)"
+    echo "  Re-registered   : ${registered_count}"
+}
+
 uvm_help() {
     cat <<'EOF'
 uvm - UV Manager
 
-A Conda-like environment manager for UV (Python package manager)
+A Conda-like environment manager for UV.
 
 USAGE:
     uvm <command> [options]
 
 COMMANDS:
     create <name>              Create a new virtual environment
-        --python <version>     Specify Python version (e.g., 3.11)
-        --path <path>          Custom environment location
-    
+        --python <version>     Specify Python version (for example 3.11)
+        --path <path>          Create the environment in a custom location
+
     activate <name>            Activate an environment
-    
-    deactivate                 Deactivate current environment
-    
+    deactivate                 Deactivate the current environment
+
     delete <name>              Delete an environment
-        -f, --force            Skip confirmation prompt
-    
-    list                       List all environments
-        -a, --all              Show all details
-    
-    scan [directory]           Scan and register existing UV environments
-                               (default: scans UVM_ENVS_DIR)
-    
+        -f, --force            Skip the confirmation prompt
+
+    list                       List known environments
+        -a, --all              Show the source of each environment
+
+    scan [directory]           Scan a directory and register valid environments
+    repair                     Rebuild metadata, shell hook, and mirror config
+    doctor                     Diagnose shell integration and metadata health
     help                       Show this help message
 
-EXAMPLES:
-    # Create environment with Python 3.11
-    uvm create myenv --python 3.11
-    
-    # Activate environment
-    uvm activate myenv
-    
-    # List all environments
-    uvm list
-    
-    # Delete environment
-    uvm delete myenv
-
 AUTO-ACTIVATION:
-    uvm supports automatic environment activation:
-    
-    1. Local .venv (highest priority)
-       - Automatically detects .venv in current or parent directories
-       - No configuration needed
-    
-    2. Shared environment via .uvmrc
-       - Create .uvmrc file with environment name
-       - Environment auto-activates when entering directory
-    
-    To enable auto-activation, add to ~/.bashrc or ~/.zshrc:
+    Enable shell integration by adding:
         eval "$(uvm shell-hook)"
 
-CONFIGURATION:
-    Default environment directory: ~/uv_envs/
-    Config directory: ~/.config/uvm/
-    UV config: ~/.config/uv/uv.toml
+    Priority:
+      1. Nearest parent .venv
+      2. Nearest parent .uvmrc
 
-For more information, visit: https://github.com/Tendo33/uvm
+CONFIGURATION:
+    UVM_HOME defaults to ~/.config/uvm
+    UVM_ENVS_DIR defaults to ~/uv_envs
+
 EOF
 }
-

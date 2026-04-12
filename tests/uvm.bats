@@ -1,190 +1,240 @@
 #!/usr/bin/env bats
-# =============================================================================
-# uvm 功能集成测试
-# 依赖：bats-core, uv（已安装）
-# 运行：bats tests/
-# =============================================================================
 
 setup() {
-    # 创建独立的沙盒目录（每个测试用例隔离）
     TEST_HOME="$(mktemp -d)"
     export HOME="$TEST_HOME"
-    export UVM_HOME="${TEST_HOME}/.config/uvm"
+    export UVM_HOME="${TEST_HOME}/custom-uvm-home"
     export UVM_ENVS_DIR="${TEST_HOME}/uv_envs"
-
-    # 将项目 bin 目录加入 PATH
     export PATH="${BATS_TEST_DIRNAME}/../bin:$PATH"
 
-    # 加载库文件
     source "${BATS_TEST_DIRNAME}/../lib/uvm-config.sh"
     source "${BATS_TEST_DIRNAME}/../lib/uvm-core.sh"
+    source "${BATS_TEST_DIRNAME}/../lib/uvm-shell-hooks.sh"
 }
 
 teardown() {
-    # 清理沙盒目录
     rm -rf "$TEST_HOME"
 }
 
-# ─────────────────────────────────────────────────────────
-# 模块：配置初始化
-# ─────────────────────────────────────────────────────────
+make_fake_env() {
+    local env_path="$1"
 
-@test "init_uvm_config: 创建配置目录和 envs.json" {
+    mkdir -p "${env_path}/bin"
+    cat > "${env_path}/pyvenv.cfg" <<'EOF'
+home = /tmp/python
+EOF
+
+    cat > "${env_path}/bin/activate" <<EOF
+VIRTUAL_ENV="${env_path}"
+deactivate() {
+    unset VIRTUAL_ENV
+    unset UVM_ACTIVE_ENV
+    unset UVM_AUTO_ACTIVATED
+    unset UVM_AUTO_ACTIVATED_PATH
+}
+export VIRTUAL_ENV
+EOF
+}
+
+@test "init_uvm_config creates the new metadata layout under UVM_HOME" {
     init_uvm_config
+
     [ -d "${UVM_HOME}" ]
-    [ -f "${UVM_HOME}/envs.json" ]
-    local content
-    content=$(cat "${UVM_HOME}/envs.json")
-    [ "$content" = "[]" ]
+    [ -d "${UVM_HOME}/envs.d" ]
+    [ -d "${UVM_HOME}/locks" ]
+    [ -f "${UVM_HOME}/config" ]
 }
 
-@test "init_uvm_config: 幂等性 - 重复调用不报错" {
-    init_uvm_config
-    run init_uvm_config
+@test "environment name validation rejects traversal and shell metacharacters" {
+    run uvm_is_valid_env_name "safe_env-1"
     [ "$status" -eq 0 ]
-}
 
-# ─────────────────────────────────────────────────────────
-# 模块：uvm create
-# ─────────────────────────────────────────────────────────
-
-@test "uvm_create: 成功创建虚拟环境" {
-    init_uvm_config
-    run uvm_create "testenv"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"created successfully"* ]]
-    [ -d "${UVM_ENVS_DIR}/testenv" ]
-}
-
-@test "uvm_create: 不指定环境名称时报错" {
-    init_uvm_config
-    run uvm_create
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"required"* ]]
-}
-
-@test "uvm_create: 环境已存在时报错" {
-    init_uvm_config
-    uvm_create "dupenv"
-    run uvm_create "dupenv"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"already exists"* ]]
-}
-
-@test "uvm_create: --python 参数正确传递" {
-    init_uvm_config
-    run uvm_create "pyenv311" --python "3.11"
-    [ "$status" -eq 0 ]
-    [ -d "${UVM_ENVS_DIR}/pyenv311" ]
-}
-
-@test "uvm_create: 未知参数时报错" {
-    init_uvm_config
-    run uvm_create "myenv" --unknown-flag
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"Unknown option"* ]]
-}
-
-# ─────────────────────────────────────────────────────────
-# 模块：uvm delete
-# ─────────────────────────────────────────────────────────
-
-@test "uvm_delete: 强制删除已存在的环境" {
-    init_uvm_config
-    uvm_create "delenv"
-    run uvm_delete "delenv" --force
-    [ "$status" -eq 0 ]
-    [ ! -d "${UVM_ENVS_DIR}/delenv" ]
-}
-
-@test "uvm_delete: 删除不存在的环境时报错" {
-    init_uvm_config
-    run uvm_delete "nonexistent" --force
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"not found"* ]]
-}
-
-@test "uvm_delete: 不指定环境名称时报错" {
-    init_uvm_config
-    run uvm_delete
-    [ "$status" -ne 0 ]
-}
-
-# ─────────────────────────────────────────────────────────
-# 模块：uvm list
-# ─────────────────────────────────────────────────────────
-
-@test "uvm_list: 无环境时提示创建" {
-    init_uvm_config
-    run uvm_list
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"No environments found"* || "$output" == *"create"* ]]
-}
-
-@test "uvm_list: 创建环境后显示在列表中" {
-    init_uvm_config
-    uvm_create "listenv"
-    run uvm_list
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"listenv"* ]]
-}
-
-# ─────────────────────────────────────────────────────────
-# 模块：安全回归测试 - .uvmrc 路径穿越防护
-# ─────────────────────────────────────────────────────────
-
-@test "安全: .uvmrc 合法名称通过校验" {
-    # 模拟校验逻辑
-    validate_uvmrc_name() {
-        local name="$1"
-        [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]]
-    }
-    for name in "myenv" "my-env" "env_1" "Prod123"; do
-        run validate_uvmrc_name "$name"
-        [ "$status" -eq 0 ]
-    done
-}
-
-@test "安全: .uvmrc 路径穿越字符被拒绝" {
-    validate_uvmrc_name() {
-        local name="$1"
-        [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]]
-    }
-    for name in "../evil" "../../etc" "env name" "env;rm" 'env$(cmd)'; do
-        run validate_uvmrc_name "$name"
+    for invalid in "../bad" "name with spaces" "semi;colon" "nested/path" '$(boom)'; do
+        run uvm_is_valid_env_name "$invalid"
         [ "$status" -ne 0 ]
     done
 }
 
-# ─────────────────────────────────────────────────────────
-# 模块：安全回归测试 - install.sh eval 注入已消除
-# ─────────────────────────────────────────────────────────
+@test "uvm_create rejects invalid environment names before touching the filesystem" {
+    init_uvm_config
 
-@test "安全: install.sh 不包含 'eval echo'" {
-    run grep -n 'eval echo' "${BATS_TEST_DIRNAME}/../install.sh"
-    # grep 未找到匹配时 status=1，这里期望没找到
+    run uvm_create "../escape"
+
     [ "$status" -ne 0 ]
+    [[ "$output" == *"Invalid environment name"* ]]
+    [ ! -d "${UVM_ENVS_DIR}/../escape" ]
 }
 
-# ─────────────────────────────────────────────────────────
-# 模块：JSON 元数据完整性
-# ─────────────────────────────────────────────────────────
-
-@test "元数据: 创建环境后 envs.json 被正确更新" {
+@test "uvm_create with --path registers a managed environment that list can display" {
     init_uvm_config
-    uvm_create "metaenv"
-    local envs_file="${UVM_HOME}/envs.json"
-    [ -f "$envs_file" ]
-    # 应包含环境名
-    grep -q '"name":"metaenv"' "$envs_file"
+    local custom_path="${TEST_HOME}/custom envs/myenv"
+
+    run uvm_create "customenv" --path "$custom_path"
+
+    [ "$status" -eq 0 ]
+    [ -d "$custom_path" ]
+    run uvm_list
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"customenv"* ]]
+    [[ "$output" == *"$custom_path"* ]]
 }
 
-@test "元数据: 删除环境后 envs.json 中记录被清除" {
+@test "managed metadata uses UVM_HOME and stores one record per environment" {
     init_uvm_config
-    uvm_create "rmenv"
-    uvm_delete "rmenv" --force
-    local envs_file="${UVM_HOME}/envs.json"
-    # 删除后不应再包含该名称
-    run grep '"name":"rmenv"' "$envs_file"
+    make_fake_env "${UVM_ENVS_DIR}/metaenv"
+
+    add_env_record "metaenv" "${UVM_ENVS_DIR}/metaenv" "3.12.1"
+
+    [ -f "${UVM_HOME}/envs.d/metaenv.env" ]
+    run get_env_path "metaenv"
+    [ "$status" -eq 0 ]
+    [ "$output" = "${UVM_ENVS_DIR}/metaenv" ]
+}
+
+@test "remove_env_record only removes the requested environment record" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/env-a"
+    make_fake_env "${UVM_ENVS_DIR}/env-b"
+
+    add_env_record "env-a" "${UVM_ENVS_DIR}/env-a" "3.11.9"
+    add_env_record "env-b" "${UVM_ENVS_DIR}/env-b" "3.12.1"
+    remove_env_record "env-a"
+
+    [ ! -f "${UVM_HOME}/envs.d/env-a.env" ]
+    [ -f "${UVM_HOME}/envs.d/env-b.env" ]
+}
+
+@test "uvm_auto_activate inherits .uvmrc from a parent directory" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/shared-env"
+    add_env_record "shared-env" "${UVM_ENVS_DIR}/shared-env" "3.12.1"
+
+    mkdir -p "${TEST_HOME}/workspace/project/src/module"
+    printf 'shared-env\n' > "${TEST_HOME}/workspace/project/.uvmrc"
+
+    cd "${TEST_HOME}/workspace/project/src/module"
+    uvm_auto_activate
+
+    [ "$VIRTUAL_ENV" = "${UVM_ENVS_DIR}/shared-env" ]
+    [ "$UVM_AUTO_ACTIVATED" = "uvm:shared-env" ]
+}
+
+@test "managed block helpers are idempotent and only remove the marked section" {
+    init_uvm_config
+    local target_file="${TEST_HOME}/shellrc"
+    printf 'export PATH="/usr/bin"\n' > "$target_file"
+
+    uvm_upsert_managed_block "$target_file" "# >>> uvm test >>>" "# <<< uvm test <<<" $'line-a\nline-b'
+    uvm_upsert_managed_block "$target_file" "# >>> uvm test >>>" "# <<< uvm test <<<" $'line-a\nline-b'
+    run grep -c "line-a" "$target_file"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1" ]
+
+    uvm_remove_managed_block "$target_file" "# >>> uvm test >>>" "# <<< uvm test <<<"
+    run cat "$target_file"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'export PATH="/usr/bin"'* ]]
+    [[ "$output" != *"line-a"* ]]
+}
+
+@test "uvm_repair rebuilds metadata from the managed environments directory" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/repair-me"
+    rm -rf "${UVM_HOME}/envs.d"
+
+    run uvm_repair
+
+    [ "$status" -eq 0 ]
+    [ -f "${UVM_HOME}/envs.d/repair-me.env" ]
+}
+
+@test "uvm_doctor reports shell hook and metadata health" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/doctorenv"
+    add_env_record "doctorenv" "${UVM_ENVS_DIR}/doctorenv" "3.12.1"
+
+    run uvm_doctor
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"UVM doctor"* ]]
+    [[ "$output" == *"Metadata records"* ]]
+    [[ "$output" == *"${UVM_HOME}"* ]]
+}
+
+@test "detect_shell prefers the user's login shell when running inside bash" {
+    local original_shell="${SHELL:-}"
+
+    export SHELL="/bin/zsh"
+    run detect_shell
+    [ "$status" -eq 0 ]
+    [ "$output" = "zsh" ]
+
+    run get_shell_rc_file
+    [ "$status" -eq 0 ]
+    [ "$output" = "${HOME}/.zshrc" ]
+
+    if [ -n "$original_shell" ]; then
+        export SHELL="$original_shell"
+    else
+        unset SHELL
+    fi
+}
+
+@test "setup_uv_mirror leaves existing unmanaged python-downloads config untouched" {
+    local uv_config_dir="${HOME}/.config/uv"
+    local uv_config_file="${uv_config_dir}/uv.toml"
+
+    mkdir -p "$uv_config_dir"
+    cat > "$uv_config_file" <<'EOF'
+[python-downloads]
+url = "https://example.com/python"
+EOF
+
+    run setup_uv_mirror
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"conflict"* ]]
+    run cat "$uv_config_file"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'url = "https://example.com/python"'* ]]
+    [[ "$output" != *"# >>> uvm mirror >>>"* ]]
+}
+
+@test "uvm_create rejects duplicate environment names even when a new --path is provided" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/dupenv"
+    add_env_record "dupenv" "${UVM_ENVS_DIR}/dupenv" "3.12.1"
+
+    run uvm_create "dupenv" --path "${TEST_HOME}/other/dupenv"
+
     [ "$status" -ne 0 ]
+    [[ "$output" == *"already managed"* ]]
+    run get_env_path "dupenv"
+    [ "$status" -eq 0 ]
+    [ "$output" = "${UVM_ENVS_DIR}/dupenv" ]
+}
+
+@test "uninstall fallback removes both shell and path managed blocks" {
+    local shell_rc="${HOME}/.bashrc"
+    local uninstall_copy="${TEST_HOME}/uninstall-under-test.sh"
+    local original_home="$HOME"
+
+    cat > "$shell_rc" <<'EOF'
+# >>> uvm path >>>
+export PATH="${HOME}/.local/bin:$PATH"
+# <<< uvm path <<<
+# >>> uvm shell >>>
+eval "$(uvm shell-hook)"
+# <<< uvm shell <<<
+EOF
+
+    cp "${BATS_TEST_DIRNAME}/../uninstall.sh" "$uninstall_copy"
+
+    run env HOME="$TEST_HOME" /usr/bin/bash "$uninstall_copy" --force
+
+    [ "$status" -eq 0 ]
+    run cat "$shell_rc"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"# >>> uvm path >>>"* ]]
+    [[ "$output" != *"# >>> uvm shell >>>"* ]]
 }

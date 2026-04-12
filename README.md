@@ -12,7 +12,7 @@
 
 </div>
 
-`uvm` keeps the familiar `create / activate / deactivate / list / delete` workflow, while using `uv` for environment creation and package management. Version `1.1.0` focuses on reliability: unified config resolution, safer metadata, managed shell integration blocks, upward auto-activation lookup, and first-line diagnostics through `doctor` and `repair`.
+`uvm` keeps the familiar `create / activate / deactivate / list / delete` workflow, while using `uv` for environment creation and package management. Version `1.1.1` focuses on reliability: unified config resolution, safer metadata, managed shell integration blocks, upward auto-activation lookup, and first-line diagnostics through `doctor` and `repair`.
 
 ## Features
 
@@ -61,11 +61,12 @@ The installer:
 
 - installs `uvm` to `~/.local/bin/uvm`
 - installs libraries to `~/.local/lib/uvm`
-- initializes `UVM_HOME` at `~/.config/uvm`
+- initializes `UVM_HOME` at `${UVM_HOME:-~/.config/uvm}`
 - initializes `UVM_ENVS_DIR` at `~/uv_envs` unless overridden
 - registers existing managed environments in the default environment directory
 - writes managed PATH and shell-hook blocks instead of appending loose lines
 - updates the `uv` mirror configuration through a managed block
+- when `install.sh` is fetched from a tagged release, remote file downloads stay pinned to that same tag by default
 
 ### Non-interactive installation
 
@@ -77,6 +78,7 @@ Important:
 
 - In non-interactive mode, missing `uv` is a hard error.
 - Use this mode for CI, automation, or repeatable local setup.
+- If `UVM_HOME` is already exported, the installer reuses it instead of forcing `~/.config/uvm`.
 
 ### Custom managed environment directory
 
@@ -85,6 +87,16 @@ bash install.sh --envs-dir /path/to/envs
 ```
 
 This writes the selected directory into `$(uvm config show)` through `UVM_HOME/config`.
+
+### Advanced: override the remote download ref
+
+When you download a release-scoped `install.sh`, the installer downloads `bin/`, `lib/`, and `templates/` from the matching `v<version>` ref by default.
+
+If you intentionally want another ref, override it explicitly:
+
+```bash
+UVM_DOWNLOAD_REF=main bash install.sh -y
+```
 
 ### Local development install
 
@@ -293,6 +305,7 @@ Any directory inside that project tree inherits the nearest parent `.uvmrc`.
 - `UVM_HOME`: defaults to `~/.config/uvm`
 - `UVM_ENVS_DIR`: defaults to `~/uv_envs`
 - metadata directory: `~/.config/uvm/envs.d`
+- the installer respects an already-exported `UVM_HOME`
 
 ### Metadata format
 
@@ -430,7 +443,7 @@ Uninstall removes:
 
 - `~/.local/bin/uvm`
 - `~/.local/lib/uvm`
-- `~/.config/uvm`
+- the effective `UVM_HOME` directory
 - managed shell blocks, unless `--keep-shell-config` is used
 
 Uninstall keeps:
@@ -438,6 +451,12 @@ Uninstall keeps:
 - your virtual environments
 - `uv`
 - `~/.config/uv/uv.toml`
+
+If you installed with a custom `UVM_HOME`, export the same value before uninstalling:
+
+```bash
+UVM_HOME=/custom/uvm-home bash uninstall.sh --force
+```
 
 Details: [project_document/UNINSTALL.md](project_document/UNINSTALL.md)
 

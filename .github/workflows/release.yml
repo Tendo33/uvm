@@ -51,12 +51,29 @@ jobs:
           
           # 检查 bin/uvm 中的版本号
           SCRIPT_VERSION=$(grep 'UVM_VERSION=' bin/uvm | head -n1 | cut -d'"' -f2)
+          INSTALL_VERSION=$(grep 'UVM_INSTALL_VERSION=' install.sh | head -n1 | cut -d'"' -f2)
+          UVM_INSTALL_SKIP_MAIN=1
+          # shellcheck source=/dev/null
+          source install.sh
+          DEFAULT_DOWNLOAD_REF=$(uvm_get_download_ref)
           echo "Tag version   : $TAG_VERSION"
           echo "Script version: $SCRIPT_VERSION"
+          echo "Install version: $INSTALL_VERSION"
+          echo "Download ref  : $DEFAULT_DOWNLOAD_REF"
           
           if [ "$TAG_VERSION" != "$SCRIPT_VERSION" ]; then
             echo "❌ Version mismatch: tag=$TAG_VERSION but bin/uvm=$SCRIPT_VERSION"
             echo "   Please update UVM_VERSION in bin/uvm before tagging."
+            exit 1
+          fi
+          if [ "$TAG_VERSION" != "$INSTALL_VERSION" ]; then
+            echo "❌ Version mismatch: tag=$TAG_VERSION but install.sh=$INSTALL_VERSION"
+            echo "   Please update UVM_INSTALL_VERSION in install.sh before tagging."
+            exit 1
+          fi
+          if [ "v$TAG_VERSION" != "$DEFAULT_DOWNLOAD_REF" ]; then
+            echo "❌ Download ref mismatch: expected v$TAG_VERSION but install.sh defaults to $DEFAULT_DOWNLOAD_REF"
+            echo "   Please keep install.sh remote download ref aligned with the release tag."
             exit 1
           fi
           echo "✅ Versions match: $TAG_VERSION"

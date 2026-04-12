@@ -27,6 +27,10 @@ print_info() {
     echo -e "${BLUE}i${NC} $1"
 }
 
+uvm_get_effective_home() {
+    printf '%s\n' "${UVM_HOME:-${HOME}/.config/uvm}"
+}
+
 source_installed_config_lib() {
     local config_lib="${HOME}/.local/lib/uvm/uvm-config.sh"
     [ -f "$config_lib" ] || return 1
@@ -49,13 +53,26 @@ detect_shell_rc() {
     fi
 }
 
+resolve_managed_envs_dir() {
+    if source_installed_config_lib >/dev/null 2>&1; then
+        uvm_load_user_config
+        uvm_get_default_envs_dir
+        return 0
+    fi
+
+    printf '%s\n' "${HOME}/uv_envs"
+}
+
 show_removal_plan() {
     local shell_rc
+    local uvm_home
+
+    uvm_home="$(uvm_get_effective_home)"
 
     echo "The following will be removed:"
     [ -f "${HOME}/.local/bin/uvm" ] && echo "  - ${HOME}/.local/bin/uvm"
     [ -d "${HOME}/.local/lib/uvm" ] && echo "  - ${HOME}/.local/lib/uvm"
-    [ -d "${HOME}/.config/uvm" ] && echo "  - ${HOME}/.config/uvm"
+    [ -d "${uvm_home}" ] && echo "  - ${uvm_home}"
 
     shell_rc=$(detect_shell_rc)
     if [ -f "$shell_rc" ]; then
@@ -109,6 +126,10 @@ remove_from_shell_rc() {
 }
 
 remove_files() {
+    local uvm_home
+
+    uvm_home="$(uvm_get_effective_home)"
+
     if [ -f "${HOME}/.local/bin/uvm" ]; then
         rm -f "${HOME}/.local/bin/uvm"
         print_success "Removed ${HOME}/.local/bin/uvm"
@@ -119,9 +140,9 @@ remove_files() {
         print_success "Removed ${HOME}/.local/lib/uvm"
     fi
 
-    if [ -d "${HOME}/.config/uvm" ]; then
-        rm -rf "${HOME}/.config/uvm"
-        print_success "Removed ${HOME}/.config/uvm"
+    if [ -d "${uvm_home}" ]; then
+        rm -rf "${uvm_home}"
+        print_success "Removed ${uvm_home}"
     fi
 
     return 0
@@ -129,7 +150,7 @@ remove_files() {
 
 show_post_uninstall() {
     local backup_file="$1"
-    local envs_dir="${HOME}/uv_envs"
+    local envs_dir="$2"
 
     echo ""
     print_success "uvm has been uninstalled successfully"
@@ -137,9 +158,6 @@ show_post_uninstall() {
     echo "  1. Reload your shell configuration"
     [ -n "$backup_file" ] && echo "  2. Shell backup: $backup_file"
 
-    if source_installed_config_lib >/dev/null 2>&1; then
-        envs_dir="$(uvm_get_default_envs_dir)"
-    fi
     if [ -d "$envs_dir" ]; then
         echo "  3. Your environments remain at: $envs_dir"
     fi
@@ -150,6 +168,7 @@ main() {
     local keep_shell_config=false
     local shell_rc
     local backup_file=""
+    local envs_dir
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -181,6 +200,7 @@ EOF
     done
 
     show_removal_plan
+    envs_dir="$(resolve_managed_envs_dir)"
 
     if [ "$force_mode" = false ]; then
         printf "Do you want to continue? (y/N): "
@@ -200,7 +220,7 @@ EOF
     fi
 
     remove_files
-    show_post_uninstall "$backup_file"
+    show_post_uninstall "$backup_file" "$envs_dir"
 }
 
 main "$@"

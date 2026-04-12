@@ -36,6 +36,15 @@ export VIRTUAL_ENV
 EOF
 }
 
+load_install_functions() {
+    mkdir -p "${HOME}/.local/lib/uvm"
+    cp "${BATS_TEST_DIRNAME}/../lib/uvm-config.sh" "${HOME}/.local/lib/uvm/uvm-config.sh"
+    export UVM_INSTALL_SKIP_MAIN=1
+    # shellcheck source=/dev/null
+    source "${BATS_TEST_DIRNAME}/../install.sh"
+    unset UVM_INSTALL_SKIP_MAIN
+}
+
 @test "init_uvm_config creates the new metadata layout under UVM_HOME" {
     init_uvm_config
 
@@ -237,4 +246,77 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" != *"# >>> uvm path >>>"* ]]
     [[ "$output" != *"# >>> uvm shell >>>"* ]]
+}
+
+@test "uninstall respects an explicitly supplied UVM_HOME" {
+    local uninstall_copy="${TEST_HOME}/uninstall-under-test.sh"
+    local custom_home="${TEST_HOME}/custom-uvm-home"
+
+    mkdir -p "${custom_home}"
+    cp "${BATS_TEST_DIRNAME}/../uninstall.sh" "$uninstall_copy"
+
+    run env HOME="$TEST_HOME" UVM_HOME="$custom_home" /usr/bin/bash "$uninstall_copy" --force --keep-shell-config
+
+    [ "$status" -eq 0 ]
+    [ ! -d "$custom_home" ]
+    [ ! -d "${TEST_HOME}/.config/uvm" ]
+}
+
+@test "uninstall reports the configured managed env directory before removing libraries" {
+    local uninstall_copy="${TEST_HOME}/uninstall-under-test.sh"
+    local custom_home="${TEST_HOME}/custom-uvm-home"
+    local custom_envs="${TEST_HOME}/custom-envs"
+
+    mkdir -p "${HOME}/.local/lib/uvm" "${custom_home}" "${custom_envs}"
+    cp "${BATS_TEST_DIRNAME}/../lib/uvm-config.sh" "${HOME}/.local/lib/uvm/uvm-config.sh"
+    cp "${BATS_TEST_DIRNAME}/../uninstall.sh" "$uninstall_copy"
+    printf 'UVM_ENVS_DIR=%q\n' "$custom_envs" > "${custom_home}/config"
+
+    run env HOME="$TEST_HOME" UVM_HOME="$custom_home" /usr/bin/bash "$uninstall_copy" --force --keep-shell-config
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$custom_envs"* ]]
+}
+
+@test "initialize_config respects externally supplied UVM_HOME" {
+    load_install_functions
+    export UVM_HOME="${TEST_HOME}/custom-uvm-home"
+
+    run initialize_config "${TEST_HOME}/envs"
+
+    [ "$status" -eq 0 ]
+    [ -d "${UVM_HOME}" ]
+    [ -f "${UVM_HOME}/config" ]
+    [ ! -d "${TEST_HOME}/.config/uvm" ]
+}
+
+@test "install_uvm stores templates under the effective UVM_HOME" {
+    load_install_functions
+    export UVM_HOME="${TEST_HOME}/custom-uvm-home"
+
+    run install_uvm "${BATS_TEST_DIRNAME}/.."
+
+    [ "$status" -eq 0 ]
+    [ -d "${UVM_HOME}/templates" ]
+    [ -f "${UVM_HOME}/templates/uv.toml.template" ]
+    [ ! -d "${TEST_HOME}/.config/uvm/templates" ]
+}
+
+@test "remote install downloads default to the current release ref" {
+    load_install_functions
+
+    run uvm_get_download_base_url
+
+    [ "$status" -eq 0 ]
+    [ "$output" = "https://raw.githubusercontent.com/Tendo33/uvm/v${UVM_INSTALL_VERSION}" ]
+}
+
+@test "remote install download ref can be overridden explicitly" {
+    load_install_functions
+    export UVM_DOWNLOAD_REF="main"
+
+    run uvm_get_download_base_url
+
+    [ "$status" -eq 0 ]
+    [ "$output" = "https://raw.githubusercontent.com/Tendo33/uvm/main" ]
 }

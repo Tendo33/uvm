@@ -1,6 +1,6 @@
 # UVM 卸载指南
 
-本文档说明当前版本 `uninstall.sh` 的真实行为、保留项、可选参数以及手动清理方法。以下内容已对齐 `1.1.0` 的卸载实现。
+本文档说明当前版本 `uninstall.sh` 的真实行为、保留项、可选参数以及手动清理方法。以下内容已对齐 `1.1.1` 的卸载实现。
 
 ---
 
@@ -61,7 +61,7 @@ bash uninstall.sh --keep-shell-config
 
 - `~/.local/bin/uvm`
 - `~/.local/lib/uvm`
-- `~/.config/uvm`
+- 当前生效的 `UVM_HOME` 目录
 - shell rc 中由 `uvm` 管理的受管 block
 
 shell block 是按起止标记精确删除的，而不是删除所有包含 `uvm` 的行。
@@ -104,10 +104,16 @@ eval "$(uvm shell-hook)"
 2. 解析当前 shell 对应的 rc 文件
 3. 若未使用 `--keep-shell-config`，先备份 shell rc
 4. 按受管 block 起止标记删除 `uvm` 写入内容
-5. 删除二进制、库目录和 `~/.config/uvm`
+5. 删除二进制、库目录和当前生效的 `UVM_HOME`
 6. 输出保留项与后续建议
 
 这一流程已经修复了旧版在 `set -e` 下可能提前中断的问题。
+
+如果安装时使用了自定义 `UVM_HOME`，卸载时也应传入同样的值：
+
+```bash
+UVM_HOME=/custom/uvm-home bash uninstall.sh --force
+```
 
 ---
 
@@ -152,7 +158,7 @@ which uvm
 ```bash
 rm -f ~/.local/bin/uvm
 rm -rf ~/.local/lib/uvm
-rm -rf ~/.config/uvm
+rm -rf "${UVM_HOME:-~/.config/uvm}"
 ```
 
 然后编辑对应 shell rc 文件，删除以下受管 block：

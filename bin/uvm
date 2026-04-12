@@ -12,7 +12,7 @@ uvm_load_user_config
 source "${LIB_DIR}/uvm-core.sh"
 source "${LIB_DIR}/uvm-shell-hooks.sh"
 
-UVM_VERSION="1.1.0"
+UVM_VERSION="1.1.1"
 
 show_version() {
     echo "uvm version ${UVM_VERSION}"

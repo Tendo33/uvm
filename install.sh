@@ -8,9 +8,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-UVM_INSTALL_VERSION="1.1.0"
+UVM_INSTALL_VERSION="1.1.1"
 UVM_PATH_BLOCK_START="# >>> uvm path >>>"
 UVM_PATH_BLOCK_END="# <<< uvm path <<<"
+UVM_REPOSITORY="Tendo33/uvm"
 
 print_info() {
     echo -e "${BLUE}i${NC} $1"
@@ -83,11 +84,26 @@ install_uv() {
     command -v uv >/dev/null 2>&1
 }
 
+uvm_get_effective_home() {
+    printf '%s\n' "${UVM_HOME:-${HOME}/.config/uvm}"
+}
+
+uvm_get_download_ref() {
+    printf '%s\n' "${UVM_DOWNLOAD_REF:-v${UVM_INSTALL_VERSION}}"
+}
+
+uvm_get_download_base_url() {
+    printf 'https://raw.githubusercontent.com/%s/%s\n' \
+        "${UVM_REPOSITORY}" \
+        "$(uvm_get_download_ref)"
+}
+
 download_uvm_files() {
     local dest="$1"
-    local base_url="https://raw.githubusercontent.com/Tendo33/uvm/main"
+    local base_url
     local file_path
 
+    base_url="$(uvm_get_download_base_url)"
     mkdir -p "$dest/bin" "$dest/lib" "$dest/templates"
 
     for file_path in \
@@ -116,14 +132,16 @@ install_uvm() {
     local source_dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
     local install_dir="${HOME}/.local/bin"
     local uvm_lib_dir="${HOME}/.local/lib/uvm"
+    local uvm_home
 
+    uvm_home="$(uvm_get_effective_home)"
     print_info "Installing uvm files..."
-    mkdir -p "$install_dir" "$uvm_lib_dir" "${HOME}/.config/uvm/templates"
+    mkdir -p "$install_dir" "$uvm_lib_dir" "${uvm_home}/templates"
 
     cp "${source_dir}/bin/uvm" "${install_dir}/uvm"
     chmod +x "${install_dir}/uvm"
     cp -r "${source_dir}/lib/." "$uvm_lib_dir/"
-    cp -r "${source_dir}/templates/." "${HOME}/.config/uvm/templates/"
+    cp -r "${source_dir}/templates/." "${uvm_home}/templates/"
 
     sed -i.bak "s|SCRIPT_DIR=\".*\"|SCRIPT_DIR=\"${uvm_lib_dir}\"|g" "${install_dir}/uvm" 2>/dev/null || \
         sed -i '' "s|SCRIPT_DIR=\".*\"|SCRIPT_DIR=\"${uvm_lib_dir}\"|g" "${install_dir}/uvm" 2>/dev/null || true
@@ -200,7 +218,8 @@ initialize_config() {
     mkdir -p "$envs_dir"
 
     source_installed_config_lib
-    export UVM_HOME="${HOME}/.config/uvm"
+    export UVM_HOME
+    UVM_HOME="$(uvm_get_effective_home)"
     export UVM_ENVS_DIR="$envs_dir"
 
     init_uvm_config
@@ -216,14 +235,16 @@ initialize_config() {
 show_post_install() {
     local enable_auto_activation="$1"
     local shell_rc
+    local uvm_home
 
     shell_rc=$(detect_shell_rc)
+    uvm_home="$(uvm_get_effective_home)"
 
     echo ""
     print_success "uvm ${UVM_INSTALL_VERSION} installed successfully"
     echo "  Binary        : ${HOME}/.local/bin/uvm"
     echo "  Library       : ${HOME}/.local/lib/uvm"
-    echo "  Config        : ${HOME}/.config/uvm"
+    echo "  Config        : ${uvm_home}"
     echo "  Shell RC      : ${shell_rc}"
     echo ""
     echo "Next steps:"
@@ -360,4 +381,6 @@ EOF
     show_post_install "$enable_auto_activation"
 }
 
-main "$@"
+if [ "${UVM_INSTALL_SKIP_MAIN:-0}" != "1" ]; then
+    main "$@"
+fi

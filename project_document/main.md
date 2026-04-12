@@ -1,7 +1,7 @@
 # UVM 项目技术文档
 
 **项目名称**：uvm - UV Environment Manager  
-**当前版本**：1.1.0  
+**当前版本**：1.1.1  
 **文档更新时间**：2026-04-12  
 **状态**：已对齐当前实现
 
@@ -135,9 +135,10 @@ shell 集成与自动激活层，负责：
 
 - `UVM_HOME` 默认值：`~/.config/uvm`
 - `UVM_ENVS_DIR` 默认值：`~/uv_envs`
-- 主配置文件：`~/.config/uvm/config`
-- 元数据目录：`~/.config/uvm/envs.d`
-- 锁目录：`~/.config/uvm/locks`
+- 如果外部已导出 `UVM_HOME`，安装器与运行时都会沿用该值
+- 主配置文件：`$(uvm_get_home)/config`
+- 元数据目录：`$(uvm_get_home)/envs.d`
+- 锁目录：`$(uvm_get_home)/locks`
 - `uv` 配置文件：`~/.config/uv/uv.toml`
 
 ### 4.2 元数据布局
@@ -275,6 +276,7 @@ UVM_RECORD_CREATED=2026-04-12T10:00:00+0800
 - 检测 `uv`
 - 在需要时下载项目文件
 - 安装二进制与库文件
+- 复用外部 `UVM_HOME`，否则回落到 `~/.config/uvm`
 - 初始化配置目录
 - 写入 PATH 受管 block
 - 可选写入 shell hook 受管 block
@@ -288,8 +290,15 @@ UVM_RECORD_CREATED=2026-04-12T10:00:00+0800
 
 - 缺少 `uv` 时直接失败
 - 适合自动化与 CI
+- 如果外部已经设置 `UVM_HOME`，不会被安装器覆盖
 
-### 7.3 shell 配置写入方式
+### 7.3 远程安装版本来源
+
+- 当 `install.sh` 通过 release tag 获取时，`download_uvm_files()` 默认从同一个 `v<version>` ref 下载 `bin/`、`lib/`、`templates/`
+- 可以通过 `UVM_DOWNLOAD_REF=<ref>` 显式覆盖该 ref，用于安装 `main` 或临时验证分支
+- 这样可以避免“脚本来自某个 release，但安装内容却偷偷漂到 `main`”的不可重复安装问题
+
+### 7.4 shell 配置写入方式
 
 当前版本通过起止标记写入：
 
@@ -310,7 +319,7 @@ eval "$(uvm shell-hook)"
 - `repair` 可以重建 block
 - 卸载可以精准删除 block
 
-### 7.4 mirror 配置写入方式
+### 7.5 mirror 配置写入方式
 
 镜像配置不再粗暴覆盖整个 `uv.toml`，而是仅更新 `uvm` 受管 block，并保留一次性备份。
 如果检测到文件中已存在非 `uvm` 管理的 `[[index]]` 或 `[python-downloads]` 段，则跳过写入并给出警告，避免制造冲突配置。
@@ -326,7 +335,7 @@ eval "$(uvm shell-hook)"
 - 移除 shell 中由 `uvm` 管理的 block
 - 删除 `~/.local/bin/uvm`
 - 删除 `~/.local/lib/uvm`
-- 删除 `~/.config/uvm`
+- 删除当前生效的 `UVM_HOME`
 
 默认保留：
 
@@ -338,6 +347,10 @@ eval "$(uvm shell-hook)"
 
 - `--force`：跳过确认
 - `--keep-shell-config`：保留 shell block
+
+说明：
+
+- 如果安装时使用了自定义 `UVM_HOME`，卸载时也应传入同样的 `UVM_HOME`，以便删除对应配置目录
 
 ---
 
@@ -394,6 +407,8 @@ eval "$(uvm shell-hook)"
 - 受管 block 幂等性
 - `uvm repair`
 - `uvm doctor`
+- 安装器对外部 `UVM_HOME` 的尊重
+- 远程安装默认下载 ref 与显式覆盖逻辑
 
 ### 10.2 CI 分层
 

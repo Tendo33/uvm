@@ -12,7 +12,7 @@
 
 </div>
 
-`uvm` 保留了熟悉的 `create / activate / deactivate / list / delete` 工作流，同时把环境创建与包管理交给 `uv`。`1.1.0` 版本的重点不是堆新功能，而是把底层做稳：统一配置解析、改进元数据存储、把 shell 与镜像配置改成受管 block、让自动激活支持向上继承，并提供 `doctor` / `repair` 作为一线诊断入口。
+`uvm` 保留了熟悉的 `create / activate / deactivate / list / delete` 工作流，同时把环境创建与包管理交给 `uv`。`1.1.1` 版本的重点不是堆新功能，而是把底层做稳：统一配置解析、改进元数据存储、把 shell 与镜像配置改成受管 block、让自动激活支持向上继承，并提供 `doctor` / `repair` 作为一线诊断入口。
 
 ## 功能概览
 
@@ -62,11 +62,12 @@ rm install.sh
 
 - 把 `uvm` 安装到 `~/.local/bin/uvm`
 - 把库文件安装到 `~/.local/lib/uvm`
-- 初始化 `UVM_HOME`，默认位置为 `~/.config/uvm`
+- 初始化 `UVM_HOME`，有效位置为 `${UVM_HOME:-~/.config/uvm}`
 - 初始化 `UVM_ENVS_DIR`，默认位置为 `~/uv_envs`
 - 扫描默认环境目录并注册已有环境
 - 通过受管 block 写入 PATH 与 shell hook，而不是粗暴追加零散行
 - 通过受管 block 更新 `uv` 镜像配置
+- 如果 `install.sh` 来自某个 release tag，远程下载的 `bin/`、`lib/`、`templates/` 默认也会固定到同一个 tag
 
 ### 非交互安装
 
@@ -78,6 +79,7 @@ bash install.sh -y
 
 - 非交互模式下，如果系统没有 `uv`，安装会直接失败。
 - 这个模式适合 CI、自动化脚本和重复部署场景。
+- 如果外部已经导出了 `UVM_HOME`，安装器会复用它，不会强制改回 `~/.config/uvm`。
 
 ### 自定义受管环境目录
 
@@ -86,6 +88,16 @@ bash install.sh --envs-dir /path/to/envs
 ```
 
 该目录会被写入 `UVM_HOME/config`，并在 `uvm config show` 中体现为当前有效配置。
+
+### 高级用法：覆盖远程下载 ref
+
+当你下载的是某个 release 对应的 `install.sh` 时，安装器默认会从匹配的 `v<version>` ref 下载 `bin/`、`lib/` 和 `templates/`。
+
+如果你明确想安装别的 ref，可以显式覆盖：
+
+```bash
+UVM_DOWNLOAD_REF=main bash install.sh -y
+```
 
 ### 本地开发安装
 
@@ -294,6 +306,7 @@ echo "shared-311" > .uvmrc
 - `UVM_HOME`：默认 `~/.config/uvm`
 - `UVM_ENVS_DIR`：默认 `~/uv_envs`
 - 元数据目录：`~/.config/uvm/envs.d`
+- 如果外部已经设置 `UVM_HOME`，安装器会沿用该值
 
 ### 元数据格式
 
@@ -426,7 +439,7 @@ bash uninstall.sh --keep-shell-config
 
 - `~/.local/bin/uvm`
 - `~/.local/lib/uvm`
-- `~/.config/uvm`
+- 当前生效的 `UVM_HOME` 目录
 - shell 中由 `uvm` 写入的受管 block，除非使用 `--keep-shell-config`
 
 卸载会保留：
@@ -434,6 +447,12 @@ bash uninstall.sh --keep-shell-config
 - 你的虚拟环境目录
 - `uv`
 - `~/.config/uv/uv.toml`
+
+如果你安装时使用了自定义 `UVM_HOME`，卸载时请带上同样的值：
+
+```bash
+UVM_HOME=/custom/uvm-home bash uninstall.sh --force
+```
 
 详细说明见：[project_document/UNINSTALL.md](project_document/UNINSTALL.md)
 

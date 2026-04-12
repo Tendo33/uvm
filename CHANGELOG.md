@@ -5,6 +5,19 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.1] - 2026-04-12
+
+### Fixed
+- Installer now respects an externally supplied `UVM_HOME` instead of forcing `~/.config/uvm`
+- Release-scoped `install.sh` now keeps remote downloads pinned to the matching `v<version>` ref by default
+- Uninstall now respects an explicitly supplied `UVM_HOME` and still reports the configured managed environments directory
+
+### Changed
+- Added release checks to verify `bin/uvm`, `install.sh`, and the installer download ref stay aligned with the release tag
+- Expanded BATS coverage around installer and uninstaller configuration behavior
+
+---
+
 ## [1.1.0] - 2026-04-12
 
 ### Changed
@@ -147,6 +160,7 @@
 
 ---
 
+[1.1.1]: https://github.com/Tendo33/uvm/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Tendo33/uvm/releases/tag/v1.1.0
 [1.0.5]: https://github.com/Tendo33/uvm/releases/tag/v1.0.5
 [1.0.4]: https://github.com/Tendo33/uvm/releases/tag/v1.0.4

@@ -42,7 +42,7 @@ jobs:
           bash -n install.sh
           bash -n uninstall.sh
           bash -n fix-shell-hook.sh
-          bash -n tests/uvm.bats
+          # BATS files use @test syntax and are validated by the bats job below.
 
   bats:
     name: BATS Tests

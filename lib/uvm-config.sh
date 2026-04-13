@@ -1,7 +1,5 @@
 #!/bin/bash
 
-UVM_METADATA_VERSION="2"
-
 uvm_get_home() {
     echo "${UVM_HOME:-${HOME}/.config/uvm}"
 }

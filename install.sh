@@ -262,7 +262,6 @@ interactive_setup() {
     local install_uv_choice="n"
     local enable_auto_activation="y"
     local choice
-    local custom_path
 
     echo ""
     echo "UVM installation wizard"

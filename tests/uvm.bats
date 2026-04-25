@@ -227,6 +227,24 @@ load_install_functions() {
     unset UVM_PLATFORM_OVERRIDE
 }
 
+@test "setup_uv_mirror with no URL does nothing (opt-in)" {
+    local uv_config_file="${HOME}/.config/uv/uv.toml"
+
+    run setup_uv_mirror
+    [ "$status" -eq 0 ]
+    [ ! -f "$uv_config_file" ]
+}
+
+@test "setup_uv_mirror with URL writes managed block" {
+    local uv_config_file="${HOME}/.config/uv/uv.toml"
+
+    run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
+    [ "$status" -eq 0 ]
+    [ -f "$uv_config_file" ]
+    grep -q "pypi.tuna.tsinghua.edu.cn" "$uv_config_file"
+    grep -q "# >>> uvm mirror >>>" "$uv_config_file"
+}
+
 @test "setup_uv_mirror leaves existing unmanaged python-downloads config untouched" {
     local uv_config_dir="${HOME}/.config/uv"
     local uv_config_file="${uv_config_dir}/uv.toml"
@@ -237,7 +255,7 @@ load_install_functions() {
 url = "https://example.com/python"
 EOF
 
-    run setup_uv_mirror
+    run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"conflict"* ]]

@@ -212,6 +212,7 @@ configure_shell_integration() {
 
 initialize_config() {
     local envs_dir="${1:-${HOME}/uv_envs}"
+    local mirror_url="${2:-}"
     local registered_count
 
     print_info "Initializing uvm configuration..."
@@ -225,11 +226,14 @@ initialize_config() {
     init_uvm_config
     printf 'UVM_ENVS_DIR=%q\n' "$envs_dir" > "$(uvm_get_config_file)"
     registered_count=$(scan_and_register_envs "$envs_dir")
-    setup_uv_mirror
+
+    if [ -n "$mirror_url" ]; then
+        setup_uv_mirror "$mirror_url"
+        print_success "Mirror configured: ${mirror_url}"
+    fi
 
     print_success "Environment directory configured: $envs_dir"
     print_success "Registered ${registered_count} existing environment(s)"
-    print_success "Mirror configuration updated"
 }
 
 show_post_install() {
@@ -261,6 +265,7 @@ interactive_setup() {
     local envs_dir="${HOME}/uv_envs"
     local install_uv_choice="n"
     local enable_auto_activation="y"
+    local mirror_url=""
     local choice
 
     echo ""
@@ -286,15 +291,20 @@ interactive_setup() {
     read -r enable_auto_activation
     enable_auto_activation="${enable_auto_activation:-y}"
 
+    printf "Configure a PyPI mirror URL? (press Enter to skip): "
+    read -r mirror_url
+
     echo "$envs_dir"
     echo "$install_uv_choice"
     echo "$enable_auto_activation"
+    echo "$mirror_url"
 }
 
 main() {
     local script_dir
     local temp_dir=""
     local custom_envs_dir=""
+    local custom_mirror_url=""
     local non_interactive=false
     local install_uv_choice="n"
     local enable_auto_activation="y"
@@ -319,6 +329,14 @@ main() {
                 non_interactive=true
                 shift 2
                 ;;
+            --mirror)
+                custom_mirror_url="$2"
+                shift 2
+                ;;
+            --no-mirror)
+                custom_mirror_url=""
+                shift
+                ;;
             -y|--non-interactive)
                 non_interactive=true
                 shift
@@ -330,6 +348,8 @@ UVM Installer v${UVM_INSTALL_VERSION}
 Usage: ./install.sh [OPTIONS]
 
   --envs-dir <path>    Custom directory for virtual environments
+  --mirror <url>       Configure a PyPI mirror (e.g. https://pypi.tuna.tsinghua.edu.cn/simple)
+  --no-mirror          Skip mirror configuration (default in non-interactive mode)
   -y, --non-interactive
                        Use defaults and fail if UV is missing
   -h, --help           Show this help message
@@ -351,6 +371,7 @@ EOF
         custom_envs_dir=$(printf '%s\n' "$config_result" | sed -n '1p')
         install_uv_choice=$(printf '%s\n' "$config_result" | sed -n '2p')
         enable_auto_activation=$(printf '%s\n' "$config_result" | sed -n '3p')
+        custom_mirror_url=$(printf '%s\n' "$config_result" | sed -n '4p')
     else
         custom_envs_dir="${custom_envs_dir:-${HOME}/uv_envs}"
         print_info "Running in non-interactive mode"
@@ -371,7 +392,7 @@ EOF
 
     install_uvm "$script_dir"
     configure_path
-    initialize_config "$custom_envs_dir"
+    initialize_config "$custom_envs_dir" "$custom_mirror_url"
 
     if [[ "$enable_auto_activation" =~ ^[Yy]$ ]]; then
         configure_shell_integration

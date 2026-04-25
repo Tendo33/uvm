@@ -585,21 +585,18 @@ uvm_file_has_unmanaged_mirror_config() {
 }
 
 setup_uv_mirror() {
+    local mirror_url="${1:-}"
     local uv_config_dir
     local uv_config_file
     local mirror_block
 
+    # No URL provided: nothing to do (opt-in only)
+    if [ -z "$mirror_url" ]; then
+        return 0
+    fi
+
     uv_config_dir=$(uvm_get_uv_config_dir)
     uv_config_file=$(uvm_get_uv_config_file)
-    mirror_block=$(cat <<'EOF'
-[[index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-default = true
-
-[python-downloads]
-url = "https://mirrors.tuna.tsinghua.edu.cn/python-releases/"
-EOF
-)
 
     mkdir -p "$uv_config_dir" || return 1
     if uvm_file_has_unmanaged_mirror_config "$uv_config_file"; then
@@ -610,6 +607,16 @@ EOF
     if [ -f "$uv_config_file" ] && [ ! -f "${uv_config_file}.backup" ]; then
         cp "$uv_config_file" "${uv_config_file}.backup"
     fi
+
+    mirror_block=$(cat <<EOF
+[[index]]
+url = "${mirror_url}"
+default = true
+
+[python-downloads]
+url = "${mirror_url%/simple*}"
+EOF
+)
 
     uvm_upsert_managed_block \
         "$uv_config_file" \

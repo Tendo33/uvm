@@ -384,7 +384,15 @@ uvm_repair() {
 
     shell_rc=$(get_shell_rc_file)
     uvm_ensure_shell_hook_configured "$shell_rc" || return 1
-    setup_uv_mirror || return 1
+
+    # Only re-apply mirror if a managed block already exists (do not silently
+    # overwrite user config for those who never opted in to a mirror).
+    if uvm_file_contains_managed_block \
+        "$(uvm_get_uv_config_file)" \
+        "$(uvm_get_mirror_start_marker)" \
+        "$(uvm_get_mirror_end_marker)"; then
+        echo "  Mirror block already configured; skipping rewrite"
+    fi
 
     echo "Repair complete"
     echo "  Shell hook file : ${shell_rc}"

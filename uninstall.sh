@@ -140,6 +140,20 @@ remove_files() {
         print_success "Removed ${HOME}/.local/lib/uvm"
     fi
 
+    # Remove bash completion file
+    local bash_completion="${HOME}/.local/share/bash-completion/completions/uvm"
+    if [ -f "$bash_completion" ]; then
+        rm -f "$bash_completion"
+        print_success "Removed bash completion: ${bash_completion}"
+    fi
+
+    # Remove zsh completion file
+    local zsh_completion="${HOME}/.zfunc/_uvm"
+    if [ -f "$zsh_completion" ]; then
+        rm -f "$zsh_completion"
+        print_success "Removed zsh completion: ${zsh_completion}"
+    fi
+
     if [ -d "${uvm_home}" ]; then
         rm -rf "${uvm_home}"
         print_success "Removed ${uvm_home}"

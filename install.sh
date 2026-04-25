@@ -104,13 +104,14 @@ download_uvm_files() {
     local file_path
 
     base_url="$(uvm_get_download_base_url)"
-    mkdir -p "$dest/bin" "$dest/lib" "$dest/templates"
+    mkdir -p "$dest/bin" "$dest/lib" "$dest/templates" "$dest/completions"
 
     for file_path in \
         bin/uvm \
         lib/uvm-config.sh \
         lib/uvm-core.sh \
         lib/uvm-shell-hooks.sh \
+        completions/uvm.bash \
         templates/uv.toml.template
     do
         local url="${base_url}/${file_path}"
@@ -208,6 +209,18 @@ configure_shell_integration() {
     source_installed_config_lib
     uvm_ensure_shell_hook_configured "$shell_rc"
     print_success "Shell hook configured in ${shell_rc}"
+}
+
+install_completions() {
+    local source_dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+    local bash_completion_dir="${HOME}/.local/share/bash-completion/completions"
+    local src_bash="${source_dir}/completions/uvm.bash"
+
+    if [ -f "$src_bash" ]; then
+        mkdir -p "$bash_completion_dir"
+        cp "$src_bash" "${bash_completion_dir}/uvm"
+        print_success "Bash completion installed to ${bash_completion_dir}/uvm"
+    fi
 }
 
 initialize_config() {
@@ -392,6 +405,7 @@ EOF
 
     install_uvm "$script_dir"
     configure_path
+    install_completions "$script_dir"
     initialize_config "$custom_envs_dir" "$custom_mirror_url"
 
     if [[ "$enable_auto_activation" =~ ^[Yy]$ ]]; then

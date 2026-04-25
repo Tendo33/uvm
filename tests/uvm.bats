@@ -45,6 +45,11 @@ load_install_functions() {
     unset UVM_INSTALL_SKIP_MAIN
 }
 
+load_completion_script() {
+    # shellcheck source=/dev/null
+    source "${BATS_TEST_DIRNAME}/../completions/uvm.bash"
+}
+
 @test "init_uvm_config creates the new metadata layout under UVM_HOME" {
     init_uvm_config
 
@@ -496,4 +501,18 @@ EOF
 
     [ "$status" -eq 0 ]
     [ "$output" = "https://raw.githubusercontent.com/Tendo33/uvm/main" ]
+}
+
+@test "bash completion script lists environment names from envs.d" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/comp-env-1"
+    make_fake_env "${UVM_ENVS_DIR}/comp-env-2"
+    add_env_record "comp-env-1" "${UVM_ENVS_DIR}/comp-env-1" "3.11.9"
+    add_env_record "comp-env-2" "${UVM_ENVS_DIR}/comp-env-2" "3.12.1"
+
+    load_completion_script
+    run _uvm_list_env_names
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"comp-env-1"* ]]
+    [[ "$output" == *"comp-env-2"* ]]
 }

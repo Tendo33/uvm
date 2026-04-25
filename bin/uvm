@@ -1,16 +1,14 @@
 #!/bin/bash
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(cd "${SCRIPT_DIR}/../lib" && pwd)"
 
 export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
 
-source "${LIB_DIR}/uvm-config.sh"
+source "${LIB_DIR}/uvm-config.sh" || { echo "Error: Failed to load uvm-config.sh from ${LIB_DIR}" >&2; exit 1; }
 uvm_load_user_config
-source "${LIB_DIR}/uvm-core.sh"
-source "${LIB_DIR}/uvm-shell-hooks.sh"
+source "${LIB_DIR}/uvm-core.sh" || { echo "Error: Failed to load uvm-core.sh from ${LIB_DIR}" >&2; exit 1; }
+source "${LIB_DIR}/uvm-shell-hooks.sh" || { echo "Error: Failed to load uvm-shell-hooks.sh from ${LIB_DIR}" >&2; exit 1; }
 
 UVM_VERSION="1.1.1"
 

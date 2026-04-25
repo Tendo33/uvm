@@ -266,7 +266,7 @@ The shell hook no longer overrides `cd`. It uses prompt/chpwd hooks instead.
 
 ## Auto-Activation
 
-`uvm` checks for activation targets upward from the current directory.
+`uvm` checks for activation targets upward from the current directory on every prompt.
 
 Priority order:
 
@@ -278,6 +278,8 @@ That means:
 - entering a project subdirectory still keeps the project environment active
 - leaving the project tree deactivates auto-activated environments
 - `.venv` wins over `.uvmrc` when both exist in scope
+
+Note: `.venv` detection is intentionally broad — any directory named `.venv` that contains a valid `pyvenv.cfg` and activation script is auto-activated, regardless of whether it was created by `uvm` or by `python -m venv` / another tool.
 
 ### Local `.venv`
 

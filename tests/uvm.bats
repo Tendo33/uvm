@@ -531,3 +531,18 @@ EOF
     [[ "$output" == *"comp-env-1"* ]]
     [[ "$output" == *"comp-env-2"* ]]
 }
+
+@test "uvm_find_upward_local_env also activates non-uvm .venv if it is a valid venv" {
+    # Intentional: auto-activation is not restricted to uvm-created environments.
+    # Any directory named .venv with pyvenv.cfg and an activate script is activated.
+    init_uvm_config
+    local non_uvm_venv="${TEST_HOME}/project/.venv"
+    make_fake_env "$non_uvm_venv"
+
+    cd "${TEST_HOME}/project"
+    run uvm_find_upward_local_env
+    [ "$status" -eq 0 ]
+    [ "$output" = "$non_uvm_venv" ]
+
+    cd "$OLDPWD"
+}

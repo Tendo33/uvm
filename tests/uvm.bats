@@ -189,6 +189,21 @@ load_install_functions() {
     fi
 }
 
+@test "get_shell_rc_file on Windows Git Bash returns bash_profile regardless of bashrc presence" {
+    local original_shell="${SHELL:-}"
+    export SHELL="/bin/bash"
+
+    # Ensure .bashrc exists (would normally cause non-Windows to return .bashrc)
+    touch "${HOME}/.bashrc"
+
+    UVM_PLATFORM_OVERRIDE="windows" run get_shell_rc_file
+    [ "$status" -eq 0 ]
+    [ "$output" = "${HOME}/.bash_profile" ]
+
+    if [ -n "$original_shell" ]; then export SHELL="$original_shell"; else unset SHELL; fi
+    unset UVM_PLATFORM_OVERRIDE
+}
+
 @test "setup_uv_mirror leaves existing unmanaged python-downloads config untouched" {
     local uv_config_dir="${HOME}/.config/uv"
     local uv_config_file="${uv_config_dir}/uv.toml"

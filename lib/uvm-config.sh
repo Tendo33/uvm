@@ -623,12 +623,20 @@ detect_shell() {
 }
 
 get_shell_rc_file() {
+    local platform
+    platform="${UVM_PLATFORM_OVERRIDE:-$(uvm_detect_platform)}"
+
     case "$(detect_shell)" in
         zsh)
             echo "${HOME}/.zshrc"
             ;;
         bash)
-            if [ -f "${HOME}/.bashrc" ]; then
+            # Windows Git Bash login shells source .bash_profile, not .bashrc.
+            # Writing to .bashrc on Windows means the hook silently fails to load
+            # on new terminals opened via Git Bash shortcut (login shell).
+            if [ "$platform" = "windows" ]; then
+                echo "${HOME}/.bash_profile"
+            elif [ -f "${HOME}/.bashrc" ]; then
                 echo "${HOME}/.bashrc"
             else
                 echo "${HOME}/.bash_profile"

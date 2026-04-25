@@ -219,6 +219,74 @@ uvm_rename() {
     return 0
 }
 
+uvm_clone() {
+    local src_name="$1"
+    local dst_name="$2"
+
+    if [ -z "$src_name" ] || [ -z "$dst_name" ]; then
+        echo "Error: Source and destination names are required"
+        echo "Usage: uvm clone <src_name> <dst_name>"
+        return 1
+    fi
+
+    if ! uvm_is_valid_env_name "$src_name" || ! uvm_is_valid_env_name "$dst_name"; then
+        echo "Error: Invalid environment name"
+        echo "Allowed characters: letters, numbers, dot, underscore, hyphen"
+        return 1
+    fi
+
+    local src_path
+    src_path=$(get_env_path "$src_name") || {
+        echo "Error: Source environment '${src_name}' not found"
+        return 1
+    }
+
+    if get_env_path "$dst_name" >/dev/null 2>&1; then
+        echo "Error: Environment '${dst_name}' already exists"
+        return 1
+    fi
+
+    local python_version
+    python_version=$(get_env_python_version "$src_path")
+
+    local dst_path
+    dst_path="$(uvm_get_default_envs_dir)/${dst_name}"
+    mkdir -p "$(uvm_get_default_envs_dir)" || return 1
+
+    echo "Cloning '${src_name}' -> '${dst_name}'..."
+    echo "  Python: ${python_version}"
+
+    if [ -n "$python_version" ] && [ "$python_version" != "unknown" ]; then
+        uv venv "$dst_path" --python "$python_version" || return 1
+    else
+        uv venv "$dst_path" || return 1
+    fi
+
+    # Copy installed packages from source to destination
+    local src_python
+    src_python=$(uvm_env_python_binary "$src_path" || true)
+    if [ -n "$src_python" ] && [ -f "$src_python" ]; then
+        echo "  Copying installed packages..."
+        local requirements
+        requirements=$(VIRTUAL_ENV="$src_path" "$src_python" -m pip freeze 2>/dev/null || true)
+        if [ -n "$requirements" ]; then
+            local dst_python
+            dst_python=$(uvm_env_python_binary "$dst_path" || true)
+            if [ -n "$dst_python" ] && [ -f "$dst_python" ]; then
+                echo "$requirements" | VIRTUAL_ENV="$dst_path" "$dst_python" -m pip install -q -r /dev/stdin || true
+            fi
+        fi
+    fi
+
+    local actual_python
+    actual_python=$(get_env_python_version "$dst_path")
+    add_env_record "$dst_name" "$dst_path" "$actual_python" || return 1
+
+    echo "Environment '${dst_name}' cloned from '${src_name}'"
+    echo "  Location: ${dst_path}"
+    echo "  Python: ${actual_python}"
+}
+
 uvm_activate() {
     local env_name="$1"
     local env_path

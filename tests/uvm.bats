@@ -208,6 +208,29 @@ EOF
     [[ "$output" == *"not found"* ]]
 }
 
+@test "uvm_clone creates new environment record from source" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/srcenv"
+    add_env_record "srcenv" "${UVM_ENVS_DIR}/srcenv" "3.12.1"
+
+    run uvm_clone "srcenv" "dstenv"
+    [ "$status" -eq 0 ]
+    [ -f "${UVM_HOME}/envs.d/dstenv.env" ]
+    [[ "$output" == *"cloned"* ]]
+}
+
+@test "uvm_clone fails when destination already exists" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/srcenv"
+    make_fake_env "${UVM_ENVS_DIR}/dstenv"
+    add_env_record "srcenv" "${UVM_ENVS_DIR}/srcenv" "3.12.1"
+    add_env_record "dstenv" "${UVM_ENVS_DIR}/dstenv" "3.12.1"
+
+    run uvm_clone "srcenv" "dstenv"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"already exists"* ]]
+}
+
 @test "uvm_auto_activate inherits .uvmrc from a parent directory" {
     init_uvm_config
     make_fake_env "${UVM_ENVS_DIR}/shared-env"

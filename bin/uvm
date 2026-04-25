@@ -50,6 +50,9 @@ main() {
         rename)
             uvm_rename "$@"
             ;;
+        clone)
+            uvm_clone "$@"
+            ;;
         list|ls)
             uvm_list "$@"
             ;;

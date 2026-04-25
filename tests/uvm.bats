@@ -231,6 +231,32 @@ EOF
     [[ "$output" == *"already exists"* ]]
 }
 
+@test "uvm_export outputs pip freeze from named environment" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/exportenv"
+    # Provide a fake python that mimics pip freeze
+    cat > "${UVM_ENVS_DIR}/exportenv/bin/python" <<'EOF'
+#!/bin/bash
+if [[ "$*" == *"freeze"* ]]; then
+    echo "requests==2.31.0"
+    echo "urllib3==2.0.7"
+fi
+EOF
+    chmod +x "${UVM_ENVS_DIR}/exportenv/bin/python"
+    add_env_record "exportenv" "${UVM_ENVS_DIR}/exportenv" "3.12.1"
+
+    run uvm_export "exportenv"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"requests==2.31.0"* ]]
+}
+
+@test "uvm_import fails when requirements file does not exist" {
+    init_uvm_config
+    run uvm_import "newenv" --from "/nonexistent/requirements.txt"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not found"* ]]
+}
+
 @test "uvm_auto_activate inherits .uvmrc from a parent directory" {
     init_uvm_config
     make_fake_env "${UVM_ENVS_DIR}/shared-env"

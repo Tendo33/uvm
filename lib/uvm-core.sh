@@ -287,6 +287,82 @@ uvm_clone() {
     echo "  Python: ${actual_python}"
 }
 
+uvm_export() {
+    local env_name="$1"
+
+    if [ -z "$env_name" ]; then
+        echo "Error: Environment name is required" >&2
+        echo "Usage: uvm export <env_name>" >&2
+        return 1
+    fi
+
+    local env_path
+    env_path=$(get_env_path "$env_name") || {
+        echo "Error: Environment '${env_name}' not found" >&2
+        return 1
+    }
+
+    local python_bin
+    python_bin=$(uvm_env_python_binary "$env_path") || {
+        echo "Error: Python binary not found in: ${env_path}" >&2
+        return 1
+    }
+
+    VIRTUAL_ENV="$env_path" "$python_bin" -m pip freeze
+}
+
+uvm_import() {
+    local env_name=""
+    local from_file=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --from)
+                from_file="$2"
+                shift 2
+                ;;
+            -*)
+                echo "Error: Unknown option: $1"
+                return 1
+                ;;
+            *)
+                if [ -z "$env_name" ]; then
+                    env_name="$1"
+                else
+                    echo "Error: Too many arguments"
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$env_name" ] || [ -z "$from_file" ]; then
+        echo "Error: Usage: uvm import <env_name> --from <requirements.txt>"
+        return 1
+    fi
+
+    if [ ! -f "$from_file" ]; then
+        echo "Error: Requirements file not found: ${from_file}"
+        return 1
+    fi
+
+    uvm_create "$env_name" || return 1
+
+    local env_path
+    env_path=$(get_env_path "$env_name") || return 1
+
+    local python_bin
+    python_bin=$(uvm_env_python_binary "$env_path") || {
+        echo "Error: Python binary not found in: ${env_path}" >&2
+        return 1
+    }
+
+    echo "Installing packages from ${from_file}..."
+    VIRTUAL_ENV="$env_path" "$python_bin" -m pip install -r "$from_file" || return 1
+    echo "Import complete"
+}
+
 uvm_activate() {
     local env_name="$1"
     local env_path

@@ -53,6 +53,12 @@ main() {
         clone)
             uvm_clone "$@"
             ;;
+        export)
+            uvm_export "$@"
+            ;;
+        import)
+            uvm_import "$@"
+            ;;
         list|ls)
             uvm_list "$@"
             ;;

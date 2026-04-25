@@ -161,6 +161,53 @@ EOF
     [[ "$output" == *"not found"* ]]
 }
 
+@test "uvm_rename renames managed environment record and directory" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/oldname"
+    add_env_record "oldname" "${UVM_ENVS_DIR}/oldname" "3.11.9"
+
+    run uvm_rename "oldname" "newname"
+    [ "$status" -eq 0 ]
+
+    [ ! -f "${UVM_HOME}/envs.d/oldname.env" ]
+    [ -f "${UVM_HOME}/envs.d/newname.env" ]
+    [ -d "${UVM_ENVS_DIR}/newname" ]
+    [ ! -d "${UVM_ENVS_DIR}/oldname" ]
+}
+
+@test "uvm_rename for custom-path env only renames record, not directory" {
+    init_uvm_config
+    local custom="${TEST_HOME}/custom/myenv"
+    make_fake_env "$custom"
+    add_env_record "myenv" "$custom" "3.12.1"
+
+    run uvm_rename "myenv" "myenv-renamed"
+    [ "$status" -eq 0 ]
+    [ ! -f "${UVM_HOME}/envs.d/myenv.env" ]
+    [ -f "${UVM_HOME}/envs.d/myenv-renamed.env" ]
+    [ -d "$custom" ]
+}
+
+@test "uvm_rename refuses to rename the active environment" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/activeenv"
+    add_env_record "activeenv" "${UVM_ENVS_DIR}/activeenv" "3.12.1"
+    export VIRTUAL_ENV="${UVM_ENVS_DIR}/activeenv"
+
+    run uvm_rename "activeenv" "other"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"active"* ]]
+
+    unset VIRTUAL_ENV
+}
+
+@test "uvm_rename rejects non-existent source environment" {
+    init_uvm_config
+    run uvm_rename "no-such-env" "newname"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not found"* ]]
+}
+
 @test "uvm_auto_activate inherits .uvmrc from a parent directory" {
     init_uvm_config
     make_fake_env "${UVM_ENVS_DIR}/shared-env"

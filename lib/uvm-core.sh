@@ -125,6 +125,7 @@ uvm_run() {
     local env_name="$1"
     shift
 
+
     if [ -z "$env_name" ]; then
         echo "Error: Environment name is required"
         echo "Usage: uvm run <env_name> <command> [args...]"
@@ -156,6 +157,66 @@ uvm_run() {
         source "$activate_script"
         exec "$@"
     )
+}
+
+uvm_rename() {
+    local old_name="$1"
+    local new_name="$2"
+
+    if [ -z "$old_name" ] || [ -z "$new_name" ]; then
+        echo "Error: Both old and new names are required"
+        echo "Usage: uvm rename <old_name> <new_name>"
+        return 1
+    fi
+
+    if ! uvm_is_valid_env_name "$old_name" || ! uvm_is_valid_env_name "$new_name"; then
+        echo "Error: Invalid environment name"
+        echo "Allowed characters: letters, numbers, dot, underscore, hyphen"
+        return 1
+    fi
+
+    local old_path
+    old_path=$(get_env_path "$old_name") || {
+        echo "Error: Environment '${old_name}' not found"
+        return 1
+    }
+
+    if [ "${VIRTUAL_ENV:-}" = "$old_path" ]; then
+        echo "Error: Cannot rename the active environment. Run 'uvm deactivate' first."
+        return 1
+    fi
+
+    # Check the target name is not already taken
+    if get_env_path "$new_name" >/dev/null 2>&1; then
+        echo "Error: Environment '${new_name}' already exists"
+        return 1
+    fi
+
+    local new_path="$old_path"
+    local default_root
+    default_root=$(uvm_get_default_envs_dir)
+
+    # If env lives under UVM_ENVS_DIR, rename the directory too
+    if uvm_path_is_within "$default_root" "$old_path" 2>/dev/null; then
+        new_path="${default_root}/${new_name}"
+        mv "$old_path" "$new_path" || {
+            echo "Error: Failed to move environment directory"
+            return 1
+        }
+    fi
+
+    # Reload python version from old record before removing it
+    local python_version="unknown"
+    if uvm_load_env_record "$old_name"; then
+        python_version="${UVM_RECORD_PYTHON:-unknown}"
+    fi
+
+    remove_env_record "$old_name" || return 1
+    add_env_record "$new_name" "$new_path" "$python_version" || return 1
+
+    echo "Environment '${old_name}' renamed to '${new_name}'"
+    [ "$new_path" != "$old_path" ] && echo "  New location: ${new_path}"
+    return 0
 }
 
 uvm_activate() {

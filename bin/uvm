@@ -59,6 +59,9 @@ main() {
         import)
             uvm_import "$@"
             ;;
+        update)
+            uvm_self_update "$@"
+            ;;
         list|ls)
             uvm_list "$@"
             ;;

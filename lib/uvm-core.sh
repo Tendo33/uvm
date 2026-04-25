@@ -481,6 +481,43 @@ uvm_delete() {
     echo "Environment '${env_name}' deleted successfully"
 }
 
+uvm_self_update() {
+    local channel="${1:-latest}"
+    local install_url
+
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+        echo "Error: curl or wget is required for uvm update"
+        return 1
+    fi
+
+    if [ "$channel" = "latest" ]; then
+        install_url="https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh"
+    else
+        install_url="https://raw.githubusercontent.com/Tendo33/uvm/${channel}/install.sh"
+    fi
+
+    echo "Updating uvm from ${install_url}..."
+    local tmp_install
+    tmp_install=$(mktemp "${TMPDIR:-/tmp}/uvm-update.XXXXXX.sh") || return 1
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$install_url" -o "$tmp_install" || {
+            rm -f "$tmp_install"
+            echo "Error: Failed to download installer"
+            return 1
+        }
+    else
+        wget -qO "$tmp_install" "$install_url" || {
+            rm -f "$tmp_install"
+            echo "Error: Failed to download installer"
+            return 1
+        }
+    fi
+
+    bash "$tmp_install" -y
+    rm -f "$tmp_install"
+}
+
 uvm_print_env_entry() {
     local env_name="$1"
     local env_path="$2"

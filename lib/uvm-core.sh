@@ -117,8 +117,25 @@ uvm_create() {
     echo "  Location: ${env_path}"
     echo "  Python: ${actual_python_version}"
     echo ""
-    echo "Next step:"
-    echo "  Run 'uvm activate ${env_name}' after enabling shell integration."
+
+    local shell_rc
+    shell_rc=$(get_shell_rc_file)
+
+    if [ -n "${VIRTUAL_ENV:-}${UVM_ACTIVE_ENV:-}" ]; then
+        # Shell integration is active in this session
+        echo "To activate: uvm activate ${env_name}"
+    elif uvm_is_shell_hook_configured "$shell_rc"; then
+        # Hook is written but this session predates it; user needs to reload
+        echo "Shell integration is installed. To activate:"
+        echo "  source ${shell_rc}"
+        echo "  uvm activate ${env_name}"
+    else
+        # Hook not configured yet
+        echo "Shell integration is not set up yet. To activate:"
+        echo "  uvm repair"
+        echo "  source ${shell_rc}"
+        echo "  uvm activate ${env_name}"
+    fi
 }
 
 uvm_run() {

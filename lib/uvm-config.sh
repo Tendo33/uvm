@@ -246,13 +246,29 @@ uvm_record_file_path() {
 uvm_load_env_record() {
     local env_name="$1"
     local record_file
+    local line key value
 
     record_file=$(uvm_record_file_path "$env_name")
     [ -f "$record_file" ] || return 1
 
     unset UVM_RECORD_NAME UVM_RECORD_PATH UVM_RECORD_PYTHON UVM_RECORD_CREATED
-    # shellcheck source=/dev/null
-    source "$record_file"
+
+    # Safe key=value parser — never sources the file so injected shell code cannot execute.
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Strip carriage returns (Windows line endings)
+        line="${line%$'\r'}"
+        case "$line" in
+            UVM_RECORD_NAME=*|UVM_RECORD_PATH=*|UVM_RECORD_PYTHON=*|UVM_RECORD_CREATED=*)
+                key="${line%%=*}"
+                value="${line#*=}"
+                # Strip surrounding single-quotes written by printf '%q' or plain quotes
+                value="${value#\'}" ; value="${value%\'}"
+                value="${value#\"}" ; value="${value%\"}"
+                printf -v "$key" '%s' "$value"
+                export "$key"
+                ;;
+        esac
+    done < "$record_file"
 
     [ -n "${UVM_RECORD_NAME:-}" ] || return 1
     [ -n "${UVM_RECORD_PATH:-}" ] || return 1
@@ -272,11 +288,13 @@ uvm_write_env_record_unlocked() {
 
     mkdir -p "$(uvm_get_env_records_dir)" || return 1
 
+    # Write plain single-quoted values. Single quotes are safe since env names,
+    # paths, and python version strings never contain single-quote characters.
     {
-        printf 'UVM_RECORD_NAME=%q\n' "$env_name"
-        printf 'UVM_RECORD_PATH=%q\n' "$env_path"
-        printf 'UVM_RECORD_PYTHON=%q\n' "${python_version:-unknown}"
-        printf 'UVM_RECORD_CREATED=%q\n' "${created_at:-$(uvm_get_iso_timestamp)}"
+        printf "UVM_RECORD_NAME='%s'\n"    "$env_name"
+        printf "UVM_RECORD_PATH='%s'\n"    "$env_path"
+        printf "UVM_RECORD_PYTHON='%s'\n"  "${python_version:-unknown}"
+        printf "UVM_RECORD_CREATED='%s'\n" "${created_at:-$(uvm_get_iso_timestamp)}"
     } > "$temp_file" || return 1
 
     mv "$temp_file" "$record_file"

@@ -22,6 +22,7 @@ _uvm_hook_get_env_path() {
     local env_name="$1"
     local default_path
     local record_file
+    local line key value
 
     uvm_shell_load_runtime_config
     uvm_is_valid_env_name "$env_name" || return 1
@@ -29,8 +30,20 @@ _uvm_hook_get_env_path() {
     record_file=$(_uvm_hook_record_file_path "$env_name")
     if [ -f "$record_file" ]; then
         unset UVM_RECORD_NAME UVM_RECORD_PATH UVM_RECORD_PYTHON UVM_RECORD_CREATED
-        # shellcheck source=/dev/null
-        source "$record_file"
+        # Safe key=value parser — never sources the file
+        while IFS= read -r line || [ -n "$line" ]; do
+            line="${line%$'\r'}"
+            case "$line" in
+                UVM_RECORD_NAME=*|UVM_RECORD_PATH=*|UVM_RECORD_PYTHON=*|UVM_RECORD_CREATED=*)
+                    key="${line%%=*}"
+                    value="${line#*=}"
+                    value="${value#\'}" ; value="${value%\'}"
+                    value="${value#\"}" ; value="${value%\"}"
+                    printf -v "$key" '%s' "$value"
+                    export "$key"
+                    ;;
+            esac
+        done < "$record_file"
         if [ -n "${UVM_RECORD_PATH:-}" ] && uvm_is_valid_uv_env "$UVM_RECORD_PATH"; then
             echo "$UVM_RECORD_PATH"
             return 0

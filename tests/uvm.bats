@@ -107,6 +107,22 @@ load_install_functions() {
     [ "$output" = "${UVM_ENVS_DIR}/metaenv" ]
 }
 
+@test "uvm_load_env_record does not execute injected shell code" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/safeenv"
+    add_env_record "safeenv" "${UVM_ENVS_DIR}/safeenv" "3.12.1"
+
+    # Append a line that would run arbitrary code if the file were sourced
+    local probe_file="${TMPDIR:-/tmp}/uvm_inject_probe_$$"
+    echo "UVM_RECORD_INJECTED=1; touch ${probe_file}" \
+        >> "${UVM_HOME}/envs.d/safeenv.env"
+
+    run uvm_load_env_record "safeenv"
+    [ "$status" -eq 0 ]
+    [ -z "${UVM_RECORD_INJECTED:-}" ]
+    [ ! -f "$probe_file" ]
+}
+
 @test "remove_env_record only removes the requested environment record" {
     init_uvm_config
     make_fake_env "${UVM_ENVS_DIR}/env-a"

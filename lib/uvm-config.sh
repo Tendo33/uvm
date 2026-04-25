@@ -66,10 +66,13 @@ uvm_detect_platform() {
 }
 
 uvm_get_iso_timestamp() {
+    # GNU date supports -Iseconds; BSD date (macOS) does not.
+    # Fall back to an equivalent format that works on both.
     if date -Iseconds >/dev/null 2>&1; then
         date -Iseconds
     else
-        date +"%Y-%m-%dT%H:%M:%S%z"
+        # BSD date: produce RFC 3339 / ISO 8601 compatible output
+        date -u +"%Y-%m-%dT%H:%M:%SZ"
     fi
 }
 

@@ -54,6 +54,13 @@ load_install_functions() {
     [ -f "${UVM_HOME}/config" ]
 }
 
+@test "uvm_get_iso_timestamp returns a valid ISO 8601 timestamp" {
+    run uvm_get_iso_timestamp
+    [ "$status" -eq 0 ]
+    # Must begin with YYYY-MM-DDTHH:MM:SS
+    [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]
+}
+
 @test "environment name validation rejects traversal and shell metacharacters" {
     run uvm_is_valid_env_name "safe_env-1"
     [ "$status" -eq 0 ]

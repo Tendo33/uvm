@@ -1,0 +1,110 @@
+#compdef uvm
+# Zsh tab-completion for uvm
+# Install: copy to ~/.zfunc/_uvm and add `fpath=(~/.zfunc $fpath)` before `compinit`
+
+_uvm_env_names() {
+    local records_dir="${UVM_HOME:-${HOME}/.config/uvm}/envs.d"
+    local -a envs
+    if [[ -d "$records_dir" ]]; then
+        for f in "$records_dir"/*.env(N); do
+            envs+=("${f:t:r}")
+        done
+    fi
+    compadd -a envs
+}
+
+_uvm() {
+    local state
+
+    _arguments -C \
+        '1: :->command' \
+        '*: :->args'
+
+    case $state in
+        command)
+            local -a commands
+            commands=(
+                'create:Create a new virtual environment'
+                'activate:Activate an environment (requires shell integration)'
+                'deactivate:Deactivate the current environment'
+                'delete:Delete an environment'
+                'list:List known environments'
+                'scan:Scan a directory and register environments'
+                'init:Initialize uvm configuration'
+                'doctor:Diagnose shell integration and metadata health'
+                'repair:Rebuild metadata and shell hook'
+                'config:Show or modify configuration'
+                'run:Run a command inside an environment without activating'
+                'rename:Rename an environment'
+                'clone:Clone an environment'
+                'export:Print installed packages to stdout'
+                'import:Create environment and install packages from a requirements file'
+                'update:Update uvm to the latest release'
+                'shell-hook:Emit shell integration code for eval'
+                'help:Show help'
+                'version:Show version'
+            )
+            _describe 'uvm command' commands
+            ;;
+
+        args)
+            case ${words[2]} in
+                activate|delete|rm|remove|export)
+                    _uvm_env_names
+                    ;;
+                run)
+                    if (( CURRENT == 3 )); then
+                        _uvm_env_names
+                    else
+                        _command_names -e
+                    fi
+                    ;;
+                rename)
+                    if (( CURRENT == 3 )); then
+                        _uvm_env_names
+                    fi
+                    ;;
+                clone)
+                    if (( CURRENT == 3 )); then
+                        _uvm_env_names
+                    fi
+                    ;;
+                create)
+                    _arguments \
+                        '--python[Python version]:version:(3.8 3.9 3.10 3.11 3.12 3.13)' \
+                        '--path[Custom environment path]:path:_files -/'
+                    ;;
+                delete|rm|remove)
+                    _arguments \
+                        '(-f --force)'{-f,--force}'[Skip confirmation prompt]' \
+                        ':environment:_uvm_env_names'
+                    ;;
+                list|ls)
+                    _arguments \
+                        '(-a --all)'{-a,--all}'[Show source of each environment]' \
+                        '--json[Output as JSON array]'
+                    ;;
+                import)
+                    _arguments \
+                        '--from[Requirements file]:file:_files'
+                    ;;
+                config)
+                    if (( CURRENT == 3 )); then
+                        local -a config_cmds
+                        config_cmds=('show:Show effective configuration' 'mirror:Manage mirror configuration')
+                        _describe 'config subcommand' config_cmds
+                    elif (( CURRENT == 4 )) && [[ ${words[3]} == mirror ]]; then
+                        local -a mirror_cmds
+                        mirror_cmds=('set:Set a custom PyPI mirror URL' 'remove:Remove the managed mirror block' 'show:Show mirror status')
+                        _describe 'mirror action' mirror_cmds
+                    fi
+                    ;;
+                scan)
+                    _files -/
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_uvm "$@"

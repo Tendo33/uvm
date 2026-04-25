@@ -112,6 +112,7 @@ download_uvm_files() {
         lib/uvm-core.sh \
         lib/uvm-shell-hooks.sh \
         completions/uvm.bash \
+        completions/_uvm \
         templates/uv.toml.template
     do
         local url="${base_url}/${file_path}"
@@ -214,12 +215,21 @@ configure_shell_integration() {
 install_completions() {
     local source_dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
     local bash_completion_dir="${HOME}/.local/share/bash-completion/completions"
+    local zsh_completion_dir="${HOME}/.zfunc"
     local src_bash="${source_dir}/completions/uvm.bash"
+    local src_zsh="${source_dir}/completions/_uvm"
 
     if [ -f "$src_bash" ]; then
         mkdir -p "$bash_completion_dir"
         cp "$src_bash" "${bash_completion_dir}/uvm"
         print_success "Bash completion installed to ${bash_completion_dir}/uvm"
+    fi
+
+    if [ -f "$src_zsh" ]; then
+        mkdir -p "$zsh_completion_dir"
+        cp "$src_zsh" "${zsh_completion_dir}/_uvm"
+        print_success "Zsh completion installed to ${zsh_completion_dir}/_uvm"
+        print_info "Add 'fpath=(~/.zfunc \$fpath)' before 'compinit' in ~/.zshrc to enable it"
     fi
 }
 

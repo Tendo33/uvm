@@ -44,6 +44,9 @@ main() {
         delete|remove|rm)
             uvm_delete "$@"
             ;;
+        run)
+            uvm_run "$@"
+            ;;
         list|ls)
             uvm_list "$@"
             ;;

@@ -136,6 +136,31 @@ load_install_functions() {
     [ -f "${UVM_HOME}/envs.d/env-b.env" ]
 }
 
+@test "uvm_run executes command inside named environment without polluting current shell" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/runenv"
+    # Provide a fake python that reports the VIRTUAL_ENV it sees
+    cat > "${UVM_ENVS_DIR}/runenv/bin/python" <<'EOF'
+#!/bin/bash
+echo "VENV=${VIRTUAL_ENV:-none}"
+EOF
+    chmod +x "${UVM_ENVS_DIR}/runenv/bin/python"
+    add_env_record "runenv" "${UVM_ENVS_DIR}/runenv" "3.12.1"
+
+    run uvm_run "runenv" python
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"VENV=${UVM_ENVS_DIR}/runenv"* ]]
+    # Caller's VIRTUAL_ENV must be unaffected
+    [ -z "${VIRTUAL_ENV:-}" ]
+}
+
+@test "uvm_run fails when environment does not exist" {
+    init_uvm_config
+    run uvm_run "ghost-env" true
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not found"* ]]
+}
+
 @test "uvm_auto_activate inherits .uvmrc from a parent directory" {
     init_uvm_config
     make_fake_env "${UVM_ENVS_DIR}/shared-env"

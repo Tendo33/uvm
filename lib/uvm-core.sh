@@ -121,6 +121,43 @@ uvm_create() {
     echo "  Run 'uvm activate ${env_name}' after enabling shell integration."
 }
 
+uvm_run() {
+    local env_name="$1"
+    shift
+
+    if [ -z "$env_name" ]; then
+        echo "Error: Environment name is required"
+        echo "Usage: uvm run <env_name> <command> [args...]"
+        return 1
+    fi
+
+    if [ $# -eq 0 ]; then
+        echo "Error: Command is required"
+        echo "Usage: uvm run <env_name> <command> [args...]"
+        return 1
+    fi
+
+    local env_path
+    env_path=$(get_env_path "$env_name") || {
+        echo "Error: Environment '${env_name}' not found"
+        echo "Run 'uvm list' to see available environments."
+        return 1
+    }
+
+    local activate_script
+    activate_script=$(uvm_env_activate_script "$env_path") || {
+        echo "Error: Activate script not found in: ${env_path}"
+        return 1
+    }
+
+    # Execute in a subshell so the caller's environment is never modified.
+    (
+        # shellcheck source=/dev/null
+        source "$activate_script"
+        exec "$@"
+    )
+}
+
 uvm_activate() {
     local env_name="$1"
     local env_path
@@ -420,13 +457,27 @@ COMMANDS:
     delete <name>              Delete an environment
         -f, --force            Skip the confirmation prompt
 
+    run <name> <cmd> [args]    Run a command inside an environment without activating
+    rename <old> <new>         Rename an environment
+    clone <src> <dst>          Clone an environment
+    export <name>              Print installed packages (pip freeze) to stdout
+    import <name> --from <f>   Create environment and install packages from a requirements file
+
     list                       List known environments
         -a, --all              Show the source of each environment
+        --json                 Output as JSON array
 
     scan [directory]           Scan a directory and register valid environments
-    repair                     Rebuild metadata, shell hook, and mirror config
+    repair                     Rebuild metadata and shell hook
     doctor                     Diagnose shell integration and metadata health
+    update                     Update uvm to the latest release
     help                       Show this help message
+
+CONFIG:
+    config show                Show effective configuration paths
+    config mirror show         Show mirror configuration status
+    config mirror set <url>    Configure a custom PyPI mirror
+    config mirror remove       Remove the managed mirror block
 
 AUTO-ACTIVATION:
     Enable shell integration by adding:

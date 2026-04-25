@@ -1,18 +1,16 @@
 #!/bin/bash
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(cd "${SCRIPT_DIR}/../lib" && pwd)"
 
 export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
 
-source "${LIB_DIR}/uvm-config.sh"
+source "${LIB_DIR}/uvm-config.sh" || { echo "Error: Failed to load uvm-config.sh from ${LIB_DIR}" >&2; exit 1; }
 uvm_load_user_config
-source "${LIB_DIR}/uvm-core.sh"
-source "${LIB_DIR}/uvm-shell-hooks.sh"
+source "${LIB_DIR}/uvm-core.sh" || { echo "Error: Failed to load uvm-core.sh from ${LIB_DIR}" >&2; exit 1; }
+source "${LIB_DIR}/uvm-shell-hooks.sh" || { echo "Error: Failed to load uvm-shell-hooks.sh from ${LIB_DIR}" >&2; exit 1; }
 
-UVM_VERSION="1.1.1"
+UVM_VERSION="1.2.0"
 
 show_version() {
     echo "uvm version ${UVM_VERSION}"
@@ -43,6 +41,24 @@ main() {
             ;;
         delete|remove|rm)
             uvm_delete "$@"
+            ;;
+        run)
+            uvm_run "$@"
+            ;;
+        rename)
+            uvm_rename "$@"
+            ;;
+        clone)
+            uvm_clone "$@"
+            ;;
+        export)
+            uvm_export "$@"
+            ;;
+        import)
+            uvm_import "$@"
+            ;;
+        update)
+            uvm_self_update "$@"
             ;;
         list|ls)
             uvm_list "$@"
@@ -78,8 +94,43 @@ main() {
             shift || true
             case "$subcommand" in
                 mirror|mirrors)
-                    setup_uv_mirror
-                    echo "Mirror configuration updated"
+                    local mirror_action="${1:-show}"
+                    shift || true
+                    case "$mirror_action" in
+                        set)
+                            local mirror_url="${1:-}"
+                            if [ -z "$mirror_url" ]; then
+                                echo "Usage: uvm config mirror set <url>"
+                                echo "Example: uvm config mirror set https://pypi.tuna.tsinghua.edu.cn/simple"
+                                return 1
+                            fi
+                            setup_uv_mirror "$mirror_url" || return 1
+                            echo "Mirror set to: ${mirror_url}"
+                            ;;
+                        remove)
+                            uvm_remove_managed_block \
+                                "$(uvm_get_uv_config_file)" \
+                                "$(uvm_get_mirror_start_marker)" \
+                                "$(uvm_get_mirror_end_marker)"
+                            echo "Mirror configuration removed from $(uvm_get_uv_config_file)"
+                            ;;
+                        show)
+                            if uvm_file_contains_managed_block \
+                                "$(uvm_get_uv_config_file)" \
+                                "$(uvm_get_mirror_start_marker)" \
+                                "$(uvm_get_mirror_end_marker)"; then
+                                echo "Managed mirror block is configured in: $(uvm_get_uv_config_file)"
+                            else
+                                echo "No managed mirror block found"
+                                echo "  To add: uvm config mirror set <url>"
+                                echo "  Example: uvm config mirror set https://pypi.tuna.tsinghua.edu.cn/simple"
+                            fi
+                            ;;
+                        *)
+                            echo "Usage: uvm config mirror <set <url> | remove | show>"
+                            return 1
+                            ;;
+                    esac
                     ;;
                 show)
                     echo "UVM Configuration:"

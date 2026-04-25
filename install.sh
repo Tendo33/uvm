@@ -8,7 +8,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-UVM_INSTALL_VERSION="1.1.1"
+UVM_INSTALL_VERSION="1.2.0"
 UVM_PATH_BLOCK_START="# >>> uvm path >>>"
 UVM_PATH_BLOCK_END="# <<< uvm path <<<"
 UVM_REPOSITORY="Tendo33/uvm"
@@ -104,13 +104,15 @@ download_uvm_files() {
     local file_path
 
     base_url="$(uvm_get_download_base_url)"
-    mkdir -p "$dest/bin" "$dest/lib" "$dest/templates"
+    mkdir -p "$dest/bin" "$dest/lib" "$dest/templates" "$dest/completions"
 
     for file_path in \
         bin/uvm \
         lib/uvm-config.sh \
         lib/uvm-core.sh \
         lib/uvm-shell-hooks.sh \
+        completions/uvm.bash \
+        completions/_uvm \
         templates/uv.toml.template
     do
         local url="${base_url}/${file_path}"
@@ -210,8 +212,30 @@ configure_shell_integration() {
     print_success "Shell hook configured in ${shell_rc}"
 }
 
+install_completions() {
+    local source_dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+    local bash_completion_dir="${HOME}/.local/share/bash-completion/completions"
+    local zsh_completion_dir="${HOME}/.zfunc"
+    local src_bash="${source_dir}/completions/uvm.bash"
+    local src_zsh="${source_dir}/completions/_uvm"
+
+    if [ -f "$src_bash" ]; then
+        mkdir -p "$bash_completion_dir"
+        cp "$src_bash" "${bash_completion_dir}/uvm"
+        print_success "Bash completion installed to ${bash_completion_dir}/uvm"
+    fi
+
+    if [ -f "$src_zsh" ]; then
+        mkdir -p "$zsh_completion_dir"
+        cp "$src_zsh" "${zsh_completion_dir}/_uvm"
+        print_success "Zsh completion installed to ${zsh_completion_dir}/_uvm"
+        print_info "Add 'fpath=(~/.zfunc \$fpath)' before 'compinit' in ~/.zshrc to enable it"
+    fi
+}
+
 initialize_config() {
     local envs_dir="${1:-${HOME}/uv_envs}"
+    local mirror_url="${2:-}"
     local registered_count
 
     print_info "Initializing uvm configuration..."
@@ -225,11 +249,14 @@ initialize_config() {
     init_uvm_config
     printf 'UVM_ENVS_DIR=%q\n' "$envs_dir" > "$(uvm_get_config_file)"
     registered_count=$(scan_and_register_envs "$envs_dir")
-    setup_uv_mirror
+
+    if [ -n "$mirror_url" ]; then
+        setup_uv_mirror "$mirror_url"
+        print_success "Mirror configured: ${mirror_url}"
+    fi
 
     print_success "Environment directory configured: $envs_dir"
     print_success "Registered ${registered_count} existing environment(s)"
-    print_success "Mirror configuration updated"
 }
 
 show_post_install() {
@@ -261,6 +288,7 @@ interactive_setup() {
     local envs_dir="${HOME}/uv_envs"
     local install_uv_choice="n"
     local enable_auto_activation="y"
+    local mirror_url=""
     local choice
 
     echo ""
@@ -286,15 +314,20 @@ interactive_setup() {
     read -r enable_auto_activation
     enable_auto_activation="${enable_auto_activation:-y}"
 
+    printf "Configure a PyPI mirror URL? (press Enter to skip): "
+    read -r mirror_url
+
     echo "$envs_dir"
     echo "$install_uv_choice"
     echo "$enable_auto_activation"
+    echo "$mirror_url"
 }
 
 main() {
     local script_dir
     local temp_dir=""
     local custom_envs_dir=""
+    local custom_mirror_url=""
     local non_interactive=false
     local install_uv_choice="n"
     local enable_auto_activation="y"
@@ -319,6 +352,14 @@ main() {
                 non_interactive=true
                 shift 2
                 ;;
+            --mirror)
+                custom_mirror_url="$2"
+                shift 2
+                ;;
+            --no-mirror)
+                custom_mirror_url=""
+                shift
+                ;;
             -y|--non-interactive)
                 non_interactive=true
                 shift
@@ -330,6 +371,8 @@ UVM Installer v${UVM_INSTALL_VERSION}
 Usage: ./install.sh [OPTIONS]
 
   --envs-dir <path>    Custom directory for virtual environments
+  --mirror <url>       Configure a PyPI mirror (e.g. https://pypi.tuna.tsinghua.edu.cn/simple)
+  --no-mirror          Skip mirror configuration (default in non-interactive mode)
   -y, --non-interactive
                        Use defaults and fail if UV is missing
   -h, --help           Show this help message
@@ -351,6 +394,7 @@ EOF
         custom_envs_dir=$(printf '%s\n' "$config_result" | sed -n '1p')
         install_uv_choice=$(printf '%s\n' "$config_result" | sed -n '2p')
         enable_auto_activation=$(printf '%s\n' "$config_result" | sed -n '3p')
+        custom_mirror_url=$(printf '%s\n' "$config_result" | sed -n '4p')
     else
         custom_envs_dir="${custom_envs_dir:-${HOME}/uv_envs}"
         print_info "Running in non-interactive mode"
@@ -371,7 +415,8 @@ EOF
 
     install_uvm "$script_dir"
     configure_path
-    initialize_config "$custom_envs_dir"
+    install_completions "$script_dir"
+    initialize_config "$custom_envs_dir" "$custom_mirror_url"
 
     if [[ "$enable_auto_activation" =~ ^[Yy]$ ]]; then
         configure_shell_integration

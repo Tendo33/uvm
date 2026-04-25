@@ -45,6 +45,11 @@ load_install_functions() {
     unset UVM_INSTALL_SKIP_MAIN
 }
 
+load_completion_script() {
+    # shellcheck source=/dev/null
+    source "${BATS_TEST_DIRNAME}/../completions/uvm.bash"
+}
+
 @test "init_uvm_config creates the new metadata layout under UVM_HOME" {
     init_uvm_config
 
@@ -52,6 +57,13 @@ load_install_functions() {
     [ -d "${UVM_HOME}/envs.d" ]
     [ -d "${UVM_HOME}/locks" ]
     [ -f "${UVM_HOME}/config" ]
+}
+
+@test "uvm_get_iso_timestamp returns a valid ISO 8601 timestamp" {
+    run uvm_get_iso_timestamp
+    [ "$status" -eq 0 ]
+    # Must begin with YYYY-MM-DDTHH:MM:SS
+    [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]
 }
 
 @test "environment name validation rejects traversal and shell metacharacters" {
@@ -100,6 +112,22 @@ load_install_functions() {
     [ "$output" = "${UVM_ENVS_DIR}/metaenv" ]
 }
 
+@test "uvm_load_env_record does not execute injected shell code" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/safeenv"
+    add_env_record "safeenv" "${UVM_ENVS_DIR}/safeenv" "3.12.1"
+
+    # Append a line that would run arbitrary code if the file were sourced
+    local probe_file="${TMPDIR:-/tmp}/uvm_inject_probe_$$"
+    echo "UVM_RECORD_INJECTED=1; touch ${probe_file}" \
+        >> "${UVM_HOME}/envs.d/safeenv.env"
+
+    run uvm_load_env_record "safeenv"
+    [ "$status" -eq 0 ]
+    [ -z "${UVM_RECORD_INJECTED:-}" ]
+    [ ! -f "$probe_file" ]
+}
+
 @test "remove_env_record only removes the requested environment record" {
     init_uvm_config
     make_fake_env "${UVM_ENVS_DIR}/env-a"
@@ -111,6 +139,142 @@ load_install_functions() {
 
     [ ! -f "${UVM_HOME}/envs.d/env-a.env" ]
     [ -f "${UVM_HOME}/envs.d/env-b.env" ]
+}
+
+@test "uvm_run executes command inside named environment without polluting current shell" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/runenv"
+    # Provide a fake python that reports the VIRTUAL_ENV it sees
+    cat > "${UVM_ENVS_DIR}/runenv/bin/python" <<'EOF'
+#!/bin/bash
+echo "VENV=${VIRTUAL_ENV:-none}"
+EOF
+    chmod +x "${UVM_ENVS_DIR}/runenv/bin/python"
+    add_env_record "runenv" "${UVM_ENVS_DIR}/runenv" "3.12.1"
+
+    run uvm_run "runenv" python
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"VENV=${UVM_ENVS_DIR}/runenv"* ]]
+    # Caller's VIRTUAL_ENV must be unaffected
+    [ -z "${VIRTUAL_ENV:-}" ]
+}
+
+@test "uvm_run fails when environment does not exist" {
+    init_uvm_config
+    run uvm_run "ghost-env" true
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "uvm_rename renames managed environment record and directory" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/oldname"
+    add_env_record "oldname" "${UVM_ENVS_DIR}/oldname" "3.11.9"
+
+    run uvm_rename "oldname" "newname"
+    [ "$status" -eq 0 ]
+
+    [ ! -f "${UVM_HOME}/envs.d/oldname.env" ]
+    [ -f "${UVM_HOME}/envs.d/newname.env" ]
+    [ -d "${UVM_ENVS_DIR}/newname" ]
+    [ ! -d "${UVM_ENVS_DIR}/oldname" ]
+}
+
+@test "uvm_rename for custom-path env only renames record, not directory" {
+    init_uvm_config
+    local custom="${TEST_HOME}/custom/myenv"
+    make_fake_env "$custom"
+    add_env_record "myenv" "$custom" "3.12.1"
+
+    run uvm_rename "myenv" "myenv-renamed"
+    [ "$status" -eq 0 ]
+    [ ! -f "${UVM_HOME}/envs.d/myenv.env" ]
+    [ -f "${UVM_HOME}/envs.d/myenv-renamed.env" ]
+    [ -d "$custom" ]
+}
+
+@test "uvm_rename refuses to rename the active environment" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/activeenv"
+    add_env_record "activeenv" "${UVM_ENVS_DIR}/activeenv" "3.12.1"
+    export VIRTUAL_ENV="${UVM_ENVS_DIR}/activeenv"
+
+    run uvm_rename "activeenv" "other"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"active"* ]]
+
+    unset VIRTUAL_ENV
+}
+
+@test "uvm_rename rejects non-existent source environment" {
+    init_uvm_config
+    run uvm_rename "no-such-env" "newname"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "uvm_clone creates new environment record from source" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/srcenv"
+    add_env_record "srcenv" "${UVM_ENVS_DIR}/srcenv" "3.12.1"
+
+    run uvm_clone "srcenv" "dstenv"
+    [ "$status" -eq 0 ]
+    [ -f "${UVM_HOME}/envs.d/dstenv.env" ]
+    [[ "$output" == *"cloned"* ]]
+}
+
+@test "uvm_clone fails when destination already exists" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/srcenv"
+    make_fake_env "${UVM_ENVS_DIR}/dstenv"
+    add_env_record "srcenv" "${UVM_ENVS_DIR}/srcenv" "3.12.1"
+    add_env_record "dstenv" "${UVM_ENVS_DIR}/dstenv" "3.12.1"
+
+    run uvm_clone "srcenv" "dstenv"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"already exists"* ]]
+}
+
+@test "uvm_export outputs pip freeze from named environment" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/exportenv"
+    # Provide a fake python that mimics pip freeze
+    cat > "${UVM_ENVS_DIR}/exportenv/bin/python" <<'EOF'
+#!/bin/bash
+if [[ "$*" == *"freeze"* ]]; then
+    echo "requests==2.31.0"
+    echo "urllib3==2.0.7"
+fi
+EOF
+    chmod +x "${UVM_ENVS_DIR}/exportenv/bin/python"
+    add_env_record "exportenv" "${UVM_ENVS_DIR}/exportenv" "3.12.1"
+
+    run uvm_export "exportenv"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"requests==2.31.0"* ]]
+}
+
+@test "uvm_import fails when requirements file does not exist" {
+    init_uvm_config
+    run uvm_import "newenv" --from "/nonexistent/requirements.txt"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "uvm_list --json outputs a JSON array with environment entries" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/json-env"
+    add_env_record "json-env" "${UVM_ENVS_DIR}/json-env" "3.12.1"
+
+    run uvm_list --json
+    [ "$status" -eq 0 ]
+    [[ "$output" == "["* ]]
+    [[ "$output" == *"json-env"* ]]
+    [[ "$output" == *'"name"'* ]]
+    [[ "$output" == *'"path"'* ]]
+    [[ "$output" == *'"source"'* ]]
+    [[ "$output" == "]" ]] || [[ "$output" == *$'\n]' ]]
 }
 
 @test "uvm_auto_activate inherits .uvmrc from a parent directory" {
@@ -189,6 +353,39 @@ load_install_functions() {
     fi
 }
 
+@test "get_shell_rc_file on Windows Git Bash returns bash_profile regardless of bashrc presence" {
+    local original_shell="${SHELL:-}"
+    export SHELL="/bin/bash"
+
+    # Ensure .bashrc exists (would normally cause non-Windows to return .bashrc)
+    touch "${HOME}/.bashrc"
+
+    UVM_PLATFORM_OVERRIDE="windows" run get_shell_rc_file
+    [ "$status" -eq 0 ]
+    [ "$output" = "${HOME}/.bash_profile" ]
+
+    if [ -n "$original_shell" ]; then export SHELL="$original_shell"; else unset SHELL; fi
+    unset UVM_PLATFORM_OVERRIDE
+}
+
+@test "setup_uv_mirror with no URL does nothing (opt-in)" {
+    local uv_config_file="${HOME}/.config/uv/uv.toml"
+
+    run setup_uv_mirror
+    [ "$status" -eq 0 ]
+    [ ! -f "$uv_config_file" ]
+}
+
+@test "setup_uv_mirror with URL writes managed block" {
+    local uv_config_file="${HOME}/.config/uv/uv.toml"
+
+    run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
+    [ "$status" -eq 0 ]
+    [ -f "$uv_config_file" ]
+    grep -q "pypi.tuna.tsinghua.edu.cn" "$uv_config_file"
+    grep -q "# >>> uvm mirror >>>" "$uv_config_file"
+}
+
 @test "setup_uv_mirror leaves existing unmanaged python-downloads config untouched" {
     local uv_config_dir="${HOME}/.config/uv"
     local uv_config_file="${uv_config_dir}/uv.toml"
@@ -199,7 +396,7 @@ load_install_functions() {
 url = "https://example.com/python"
 EOF
 
-    run setup_uv_mirror
+    run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"conflict"* ]]
@@ -319,4 +516,33 @@ EOF
 
     [ "$status" -eq 0 ]
     [ "$output" = "https://raw.githubusercontent.com/Tendo33/uvm/main" ]
+}
+
+@test "bash completion script lists environment names from envs.d" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/comp-env-1"
+    make_fake_env "${UVM_ENVS_DIR}/comp-env-2"
+    add_env_record "comp-env-1" "${UVM_ENVS_DIR}/comp-env-1" "3.11.9"
+    add_env_record "comp-env-2" "${UVM_ENVS_DIR}/comp-env-2" "3.12.1"
+
+    load_completion_script
+    run _uvm_list_env_names
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"comp-env-1"* ]]
+    [[ "$output" == *"comp-env-2"* ]]
+}
+
+@test "uvm_find_upward_local_env also activates non-uvm .venv if it is a valid venv" {
+    # Intentional: auto-activation is not restricted to uvm-created environments.
+    # Any directory named .venv with pyvenv.cfg and an activate script is activated.
+    init_uvm_config
+    local non_uvm_venv="${TEST_HOME}/project/.venv"
+    make_fake_env "$non_uvm_venv"
+
+    cd "${TEST_HOME}/project"
+    run uvm_find_upward_local_env
+    [ "$status" -eq 0 ]
+    [ "$output" = "$non_uvm_venv" ]
+
+    cd "$OLDPWD"
 }

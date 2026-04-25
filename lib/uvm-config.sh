@@ -66,10 +66,13 @@ uvm_detect_platform() {
 }
 
 uvm_get_iso_timestamp() {
+    # GNU date supports -Iseconds; BSD date (macOS) does not.
+    # Fall back to an equivalent format that works on both.
     if date -Iseconds >/dev/null 2>&1; then
         date -Iseconds
     else
-        date +"%Y-%m-%dT%H:%M:%S%z"
+        # BSD date: produce RFC 3339 / ISO 8601 compatible output
+        date -u +"%Y-%m-%dT%H:%M:%SZ"
     fi
 }
 
@@ -243,13 +246,29 @@ uvm_record_file_path() {
 uvm_load_env_record() {
     local env_name="$1"
     local record_file
+    local line key value
 
     record_file=$(uvm_record_file_path "$env_name")
     [ -f "$record_file" ] || return 1
 
     unset UVM_RECORD_NAME UVM_RECORD_PATH UVM_RECORD_PYTHON UVM_RECORD_CREATED
-    # shellcheck source=/dev/null
-    source "$record_file"
+
+    # Safe key=value parser — never sources the file so injected shell code cannot execute.
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Strip carriage returns (Windows line endings)
+        line="${line%$'\r'}"
+        case "$line" in
+            UVM_RECORD_NAME=*|UVM_RECORD_PATH=*|UVM_RECORD_PYTHON=*|UVM_RECORD_CREATED=*)
+                key="${line%%=*}"
+                value="${line#*=}"
+                # Strip surrounding single-quotes written by printf '%q' or plain quotes
+                value="${value#\'}" ; value="${value%\'}"
+                value="${value#\"}" ; value="${value%\"}"
+                printf -v "$key" '%s' "$value"
+                export "$key"
+                ;;
+        esac
+    done < "$record_file"
 
     [ -n "${UVM_RECORD_NAME:-}" ] || return 1
     [ -n "${UVM_RECORD_PATH:-}" ] || return 1
@@ -269,11 +288,13 @@ uvm_write_env_record_unlocked() {
 
     mkdir -p "$(uvm_get_env_records_dir)" || return 1
 
+    # Write plain single-quoted values. Single quotes are safe since env names,
+    # paths, and python version strings never contain single-quote characters.
     {
-        printf 'UVM_RECORD_NAME=%q\n' "$env_name"
-        printf 'UVM_RECORD_PATH=%q\n' "$env_path"
-        printf 'UVM_RECORD_PYTHON=%q\n' "${python_version:-unknown}"
-        printf 'UVM_RECORD_CREATED=%q\n' "${created_at:-$(uvm_get_iso_timestamp)}"
+        printf "UVM_RECORD_NAME='%s'\n"    "$env_name"
+        printf "UVM_RECORD_PATH='%s'\n"    "$env_path"
+        printf "UVM_RECORD_PYTHON='%s'\n"  "${python_version:-unknown}"
+        printf "UVM_RECORD_CREATED='%s'\n" "${created_at:-$(uvm_get_iso_timestamp)}"
     } > "$temp_file" || return 1
 
     mv "$temp_file" "$record_file"
@@ -564,21 +585,18 @@ uvm_file_has_unmanaged_mirror_config() {
 }
 
 setup_uv_mirror() {
+    local mirror_url="${1:-}"
     local uv_config_dir
     local uv_config_file
     local mirror_block
 
+    # No URL provided: nothing to do (opt-in only)
+    if [ -z "$mirror_url" ]; then
+        return 0
+    fi
+
     uv_config_dir=$(uvm_get_uv_config_dir)
     uv_config_file=$(uvm_get_uv_config_file)
-    mirror_block=$(cat <<'EOF'
-[[index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-default = true
-
-[python-downloads]
-url = "https://mirrors.tuna.tsinghua.edu.cn/python-releases/"
-EOF
-)
 
     mkdir -p "$uv_config_dir" || return 1
     if uvm_file_has_unmanaged_mirror_config "$uv_config_file"; then
@@ -589,6 +607,16 @@ EOF
     if [ -f "$uv_config_file" ] && [ ! -f "${uv_config_file}.backup" ]; then
         cp "$uv_config_file" "${uv_config_file}.backup"
     fi
+
+    mirror_block=$(cat <<EOF
+[[index]]
+url = "${mirror_url}"
+default = true
+
+[python-downloads]
+url = "${mirror_url%/simple*}"
+EOF
+)
 
     uvm_upsert_managed_block \
         "$uv_config_file" \
@@ -623,12 +651,20 @@ detect_shell() {
 }
 
 get_shell_rc_file() {
+    local platform
+    platform="${UVM_PLATFORM_OVERRIDE:-$(uvm_detect_platform)}"
+
     case "$(detect_shell)" in
         zsh)
             echo "${HOME}/.zshrc"
             ;;
         bash)
-            if [ -f "${HOME}/.bashrc" ]; then
+            # Windows Git Bash login shells source .bash_profile, not .bashrc.
+            # Writing to .bashrc on Windows means the hook silently fails to load
+            # on new terminals opened via Git Bash shortcut (login shell).
+            if [ "$platform" = "windows" ]; then
+                echo "${HOME}/.bash_profile"
+            elif [ -f "${HOME}/.bashrc" ]; then
                 echo "${HOME}/.bashrc"
             else
                 echo "${HOME}/.bash_profile"

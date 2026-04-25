@@ -41,12 +41,16 @@ jobs:
           bash -n lib/uvm-shell-hooks.sh
           bash -n install.sh
           bash -n uninstall.sh
-          bash -n fix-shell-hook.sh
+          bash -n completions/uvm.bash
           # BATS files use @test syntax and are validated by the bats job below.
 
   bats:
-    name: BATS Tests
-    runs-on: ubuntu-latest
+    name: BATS Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -78,3 +82,23 @@ jobs:
           type uvm
           uvm doctor
           uvm list
+      - name: Create, activate, and delete environment
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          eval "$("$HOME/.local/bin/uvm" shell-hook)"
+          uvm create smoke-win --python 3.11
+          uvm list
+          uvm activate smoke-win
+          python --version
+          uvm deactivate
+          uvm delete smoke-win --force
+          uvm list
+      - name: Verify new commands are dispatched
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uvm help | grep -q "run"
+          uvm help | grep -q "rename"
+          uvm help | grep -q "clone"
+          uvm help | grep -q "export"
+          uvm help | grep -q "import"
+          uvm help | grep -q "update"

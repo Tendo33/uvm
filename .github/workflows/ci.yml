@@ -45,8 +45,12 @@ jobs:
           # BATS files use @test syntax and are validated by the bats job below.
 
   bats:
-    name: BATS Tests
-    runs-on: ubuntu-latest
+    name: BATS Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

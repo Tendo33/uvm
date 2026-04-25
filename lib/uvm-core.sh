@@ -541,12 +541,17 @@ uvm_list() {
     local env_name
     local env_path
     local env_dir
+    local json_mode=false
 
     UVM_LIST_SHOW_ALL=false
     while [ $# -gt 0 ]; do
         case "$1" in
             -a|--all)
                 UVM_LIST_SHOW_ALL=true
+                shift
+                ;;
+            --json)
+                json_mode=true
                 shift
                 ;;
             *)
@@ -557,6 +562,12 @@ uvm_list() {
     done
 
     init_uvm_config || return 1
+
+    if [ "$json_mode" = true ]; then
+        _uvm_list_json
+        return $?
+    fi
+
     echo "Available environments:"
     echo ""
 
@@ -593,6 +604,58 @@ ${env_name}"
     fi
 
     echo ""
+}
+
+_uvm_list_json() {
+    local first=true
+    local env_name
+    local env_path
+    local env_dir
+    local seen_names=""
+    local active
+
+    printf '[\n'
+
+    for env_name in $(uvm_list_record_names); do
+        if uvm_load_env_record "$env_name" && uvm_is_valid_uv_env "$UVM_RECORD_PATH"; then
+            env_path="$UVM_RECORD_PATH"
+            active="false"
+            [ "${VIRTUAL_ENV:-}" = "$env_path" ] && active="true"
+            [ "$first" = true ] || printf ',\n'
+            first=false
+            printf '  {"name":"%s","path":"%s","python":"%s","active":%s,"source":"managed"}' \
+                "$env_name" "$env_path" "${UVM_RECORD_PYTHON:-unknown}" "$active"
+            seen_names="${seen_names}
+${env_name}"
+        fi
+    done
+
+    if [ -d "$(uvm_get_default_envs_dir)" ]; then
+        for env_dir in "$(uvm_get_default_envs_dir)"/*; do
+            [ -d "$env_dir" ] || continue
+            env_name=$(basename "$env_dir")
+            if printf '%s\n' "$seen_names" | grep -Fxq "$env_name"; then
+                continue
+            fi
+            if ! uvm_is_valid_env_name "$env_name"; then
+                continue
+            fi
+            if uvm_is_valid_uv_env "$env_dir"; then
+                local py_ver
+                py_ver=$(get_env_python_version "$env_dir")
+                active="false"
+                [ "${VIRTUAL_ENV:-}" = "$env_dir" ] && active="true"
+                [ "$first" = true ] || printf ',\n'
+                first=false
+                printf '  {"name":"%s","path":"%s","python":"%s","active":%s,"source":"discovered"}' \
+                    "$env_name" "$env_dir" "$py_ver" "$active"
+                seen_names="${seen_names}
+${env_name}"
+            fi
+        done
+    fi
+
+    printf '\n]\n'
 }
 
 uvm_doctor() {

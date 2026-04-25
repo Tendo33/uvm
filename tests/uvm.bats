@@ -262,6 +262,21 @@ EOF
     [[ "$output" == *"not found"* ]]
 }
 
+@test "uvm_list --json outputs a JSON array with environment entries" {
+    init_uvm_config
+    make_fake_env "${UVM_ENVS_DIR}/json-env"
+    add_env_record "json-env" "${UVM_ENVS_DIR}/json-env" "3.12.1"
+
+    run uvm_list --json
+    [ "$status" -eq 0 ]
+    [[ "$output" == "["* ]]
+    [[ "$output" == *"json-env"* ]]
+    [[ "$output" == *'"name"'* ]]
+    [[ "$output" == *'"path"'* ]]
+    [[ "$output" == *'"source"'* ]]
+    [[ "$output" == "]" ]] || [[ "$output" == *$'\n]' ]]
+}
+
 @test "uvm_auto_activate inherits .uvmrc from a parent directory" {
     init_uvm_config
     make_fake_env "${UVM_ENVS_DIR}/shared-env"

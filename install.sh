@@ -8,7 +8,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-UVM_INSTALL_VERSION="1.1.1"
+UVM_INSTALL_VERSION="1.2.0"
 UVM_PATH_BLOCK_START="# >>> uvm path >>>"
 UVM_PATH_BLOCK_END="# <<< uvm path <<<"
 UVM_REPOSITORY="Tendo33/uvm"

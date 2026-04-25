@@ -7,7 +7,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [1.2.0] — 2026-04-26
 
 ### Added
 - `uvm run <env> <cmd>` — execute a command inside an environment without activating it

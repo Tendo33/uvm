@@ -10,7 +10,7 @@ uvm_load_user_config
 source "${LIB_DIR}/uvm-core.sh" || { echo "Error: Failed to load uvm-core.sh from ${LIB_DIR}" >&2; exit 1; }
 source "${LIB_DIR}/uvm-shell-hooks.sh" || { echo "Error: Failed to load uvm-shell-hooks.sh from ${LIB_DIR}" >&2; exit 1; }
 
-UVM_VERSION="1.1.1"
+UVM_VERSION="1.2.0"
 
 show_version() {
     echo "uvm version ${UVM_VERSION}"

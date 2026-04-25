@@ -634,20 +634,48 @@ uvm_doctor() {
     echo "Platform          : $(uvm_detect_platform)"
     echo "Shell             : $(detect_shell)"
     echo "Shell RC          : ${shell_rc}"
-    echo "Shell hook        : ${hook_status}"
+
+    if [ "$hook_status" = "configured" ]; then
+        echo "Shell hook        : configured"
+    else
+        echo "Shell hook        : MISSING"
+        echo "  -> Fix: uvm repair && source ${shell_rc}"
+    fi
+
     echo "UVM_HOME          : $(uvm_get_home)"
     echo "UVM_ENVS_DIR      : $(uvm_get_default_envs_dir)"
     echo "Metadata records  : $(uvm_count_metadata_records)"
-    echo "PATH ~/.local/bin : ${path_status}"
-    echo "UV                : ${uv_status}"
-    echo "Mirror block      : ${mirror_status}"
+
+    if [ "$path_status" = "present" ]; then
+        echo "PATH ~/.local/bin : present"
+    else
+        echo "PATH ~/.local/bin : MISSING"
+        echo "  -> Fix: add 'export PATH=\"\${HOME}/.local/bin:\$PATH\"' to ${shell_rc}"
+        echo "          or rerun: bash install.sh -y"
+    fi
+
+    if [ "$uv_status" = "missing" ]; then
+        echo "UV                : NOT FOUND"
+        echo "  -> Fix: https://docs.astral.sh/uv/getting-started/installation/"
+    else
+        echo "UV                : ${uv_status}"
+    fi
+
+    if [ "$mirror_status" = "configured" ]; then
+        echo "Mirror block      : configured"
+    else
+        echo "Mirror block      : not configured (optional)"
+        echo "  -> To add: uvm config mirror set <url>"
+    fi
+
     if [ -n "${VIRTUAL_ENV:-}" ]; then
         echo "Active environment: ${VIRTUAL_ENV}"
     else
         echo "Active environment: none"
     fi
+
     if [ -n "${UVM_AUTO_ACTIVATED:-}" ]; then
-        echo "Auto activated    : ${UVM_AUTO_ACTIVATED}"
+        echo "Auto activated    : ${UVM_AUTO_ACTIVATED} (from ${UVM_AUTO_PROJECT_ROOT:-unknown})"
     else
         echo "Auto activated    : no"
     fi

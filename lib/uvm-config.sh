@@ -265,7 +265,7 @@ uvm_load_env_record() {
                 value="${value#\'}" ; value="${value%\'}"
                 value="${value#\"}" ; value="${value%\"}"
                 printf -v "$key" '%s' "$value"
-                export "$key"
+                export "${key?}"
                 ;;
         esac
     done < "$record_file"

@@ -26,6 +26,7 @@ EOF
 
     cat > "${env_path}/bin/activate" <<EOF
 VIRTUAL_ENV="${env_path}"
+PATH="${env_path}/bin:${PATH}"
 deactivate() {
     unset VIRTUAL_ENV
     unset UVM_ACTIVE_ENV
@@ -33,6 +34,7 @@ deactivate() {
     unset UVM_AUTO_ACTIVATED_PATH
 }
 export VIRTUAL_ENV
+export PATH
 EOF
 }
 
@@ -436,7 +438,7 @@ EOF
 
     cp "${BATS_TEST_DIRNAME}/../uninstall.sh" "$uninstall_copy"
 
-    run env HOME="$TEST_HOME" /usr/bin/bash "$uninstall_copy" --force
+    run env HOME="$TEST_HOME" bash "$uninstall_copy" --force
 
     [ "$status" -eq 0 ]
     run cat "$shell_rc"
@@ -452,7 +454,7 @@ EOF
     mkdir -p "${custom_home}"
     cp "${BATS_TEST_DIRNAME}/../uninstall.sh" "$uninstall_copy"
 
-    run env HOME="$TEST_HOME" UVM_HOME="$custom_home" /usr/bin/bash "$uninstall_copy" --force --keep-shell-config
+    run env HOME="$TEST_HOME" UVM_HOME="$custom_home" bash "$uninstall_copy" --force --keep-shell-config
 
     [ "$status" -eq 0 ]
     [ ! -d "$custom_home" ]
@@ -469,7 +471,7 @@ EOF
     cp "${BATS_TEST_DIRNAME}/../uninstall.sh" "$uninstall_copy"
     printf 'UVM_ENVS_DIR=%q\n' "$custom_envs" > "${custom_home}/config"
 
-    run env HOME="$TEST_HOME" UVM_HOME="$custom_home" /usr/bin/bash "$uninstall_copy" --force --keep-shell-config
+    run env HOME="$TEST_HOME" UVM_HOME="$custom_home" bash "$uninstall_copy" --force --keep-shell-config
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"$custom_envs"* ]]

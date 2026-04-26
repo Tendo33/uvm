@@ -40,7 +40,7 @@ _uvm_hook_get_env_path() {
                     value="${value#\'}" ; value="${value%\'}"
                     value="${value#\"}" ; value="${value%\"}"
                     printf -v "$key" '%s' "$value"
-                    export "$key"
+                    export "${key?}"
                     ;;
             esac
         done < "$record_file"

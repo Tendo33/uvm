@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-08-07-v1-2-1-hardening",
+  "currentTodo": "Final diff review and handoff",
+  "completedTodos": [
+    "Implemented all approved hardening slices",
+    "Passed BATS on uv 0.10.0 and 0.12.2",
+    "Passed static checks and installed E2E"
+  ],
+  "activeSlice": "Closeout review",
+  "evidenceRefs": [
+    "docs/aegis/work/2026-08-07-v1-2-1-hardening/90-evidence.md"
+  ],
+  "blockedOn": null,
+  "nextStep": "Review final diff, verify workspace state, and hand off without commit or release.",
+  "updatedAt": "2026-08-07"
+}

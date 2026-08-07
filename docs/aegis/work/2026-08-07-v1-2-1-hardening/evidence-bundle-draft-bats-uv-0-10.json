@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "bats-uv-0-10",
+  "type": "test",
+  "source": "BATS v1.12.0 with uv 0.10.0",
+  "summary": "50 of 50 tests passed on macOS using uv 0.10.0.",
+  "verifier": "Codex"
+}

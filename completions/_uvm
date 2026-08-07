@@ -40,6 +40,8 @@ _uvm() {
                 'export:Print installed packages to stdout'
                 'import:Create environment and install packages from a requirements file'
                 'update:Update uvm to the latest release'
+                'trust:Trust a local .venv for auto-activation'
+                'untrust:Revoke local .venv auto-activation trust'
                 'shell-hook:Emit shell integration code for eval'
                 'help:Show help'
                 'version:Show version'
@@ -71,7 +73,7 @@ _uvm() {
                     ;;
                 create)
                     _arguments \
-                        '--python[Python version]:version:(3.8 3.9 3.10 3.11 3.12 3.13)' \
+                        '--python[Python version]:version:(3.8 3.9 3.10 3.11 3.12 3.13 3.14)' \
                         '--path[Custom environment path]:path:_files -/'
                     ;;
                 delete|rm|remove)
@@ -100,6 +102,15 @@ _uvm() {
                     fi
                     ;;
                 scan)
+                    _files -/
+                    ;;
+                trust)
+                    _arguments '1:path or list:->trust_target'
+                    if [[ $state == trust_target ]]; then
+                        _alternative 'actions:action:(list)' 'directories:directory:_files -/'
+                    fi
+                    ;;
+                untrust)
                     _files -/
                     ;;
             esac

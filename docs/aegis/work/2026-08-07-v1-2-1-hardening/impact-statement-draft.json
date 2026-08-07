@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "CLI/core/config/shell/install/CI/docs"
+  ],
+  "owners": [
+    "uvm owns named environment registry and trusted shell UX; uv owns Python, venv, package, and uv configuration semantics."
+  ],
+  "invariants": [
+    "Never execute untrusted project scripts automatically; never report package transfer success after failure; never emit invalid uv config."
+  ],
+  "compatBoundary": "Keep public 1.2.0 command names and existing envs.d records readable; do not mutate user environments or global config during development.",
+  "nonGoals": [
+    "Commit, push, tag, publish, or mutate installed user configuration."
+  ]
+}

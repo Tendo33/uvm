@@ -32,6 +32,10 @@ uvm_get_uv_config_file() {
     echo "$(uvm_get_uv_config_dir)/uv.toml"
 }
 
+uvm_get_trusted_envs_file() {
+    echo "$(uvm_get_home)/trusted-local-envs"
+}
+
 uvm_get_shell_hook_start_marker() {
     echo "# >>> uvm shell >>>"
 }
@@ -109,6 +113,21 @@ uvm_resolve_existing_path() {
     printf '%s/%s\n' "$dir_name" "$base_name"
 }
 
+uvm_resolve_target_path() {
+    local path="$1"
+    local parent_dir
+    local base_name
+    local resolved_parent
+
+    [ -n "$path" ] || return 1
+    parent_dir=$(dirname "$path")
+    base_name=$(basename "$path")
+    [ -n "$base_name" ] && [ "$base_name" != "." ] && [ "$base_name" != ".." ] || return 1
+    [ -d "$parent_dir" ] || return 1
+    resolved_parent=$(uvm_resolve_dir_path "$parent_dir") || return 1
+    printf '%s/%s\n' "$resolved_parent" "$base_name"
+}
+
 uvm_path_is_within() {
     local root_path="$1"
     local candidate_path="$2"
@@ -144,6 +163,68 @@ uvm_is_valid_env_name() {
             return 0
             ;;
     esac
+}
+
+uvm_value_has_line_break() {
+    case "$1" in
+        *$'\n'*|*$'\r'*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+uvm_json_escape() {
+    local value="$1"
+    local result=""
+    local char
+    local code
+    local escaped
+    local index=0
+    local length=${#value}
+
+    while [ "$index" -lt "$length" ]; do
+        char="${value:$index:1}"
+        # shellcheck disable=SC1003 # The case pattern is a literal backslash.
+        case "$char" in
+            '"') result="${result}\\\"" ;;
+            '\') result="${result}\\\\" ;;
+            $'\b') result="${result}\\b" ;;
+            $'\f') result="${result}\\f" ;;
+            $'\n') result="${result}\\n" ;;
+            $'\r') result="${result}\\r" ;;
+            $'\t') result="${result}\\t" ;;
+            *)
+                printf -v code '%d' "'$char"
+                if [ "$code" -lt 32 ]; then
+                    printf -v escaped '\\u%04x' "$code"
+                    result="${result}${escaped}"
+                else
+                    result="${result}${char}"
+                fi
+                ;;
+        esac
+        index=$((index + 1))
+    done
+
+    printf '%s' "$result"
+}
+
+uvm_version_is_at_least() {
+    local candidate="${1#v}"
+    local minimum="${2#v}"
+
+    awk -v candidate="$candidate" -v minimum="$minimum" 'BEGIN {
+        sub(/-.*/, "", candidate)
+        sub(/-.*/, "", minimum)
+        split(candidate, c, ".")
+        split(minimum, m, ".")
+        for (i = 1; i <= 3; i++) {
+            cv = c[i] + 0
+            mv = m[i] + 0
+            if (cv > mv) exit 0
+            if (cv < mv) exit 1
+        }
+        exit 0
+    }'
 }
 
 uvm_env_activate_script() {
@@ -328,6 +409,37 @@ remove_env_record() {
     local status=$?
     uvm_release_metadata_lock
     return $status
+}
+
+rename_env_record() {
+    local old_name="$1"
+    local new_name="$2"
+    local old_record
+    local new_record
+    local status_code
+
+    old_record=$(uvm_record_file_path "$old_name")
+    new_record=$(uvm_record_file_path "$new_name")
+    [ -f "$old_record" ] || return 1
+    [ ! -e "$new_record" ] || return 1
+    uvm_load_env_record "$old_name" || return 1
+
+    local env_path="$UVM_RECORD_PATH"
+    local python_version="${UVM_RECORD_PYTHON:-unknown}"
+    local created_at="${UVM_RECORD_CREATED:-$(uvm_get_iso_timestamp)}"
+
+    uvm_acquire_metadata_lock || return 1
+    uvm_write_env_record_unlocked "$new_name" "$env_path" "$python_version" "$created_at"
+    status_code=$?
+    if [ "$status_code" -eq 0 ]; then
+        rm -f "$old_record"
+        status_code=$?
+        if [ "$status_code" -ne 0 ]; then
+            rm -f "$new_record"
+        fi
+    fi
+    uvm_release_metadata_lock
+    return "$status_code"
 }
 
 uvm_count_metadata_records() {
@@ -522,9 +634,11 @@ uvm_upsert_managed_block() {
         printf '\n' >> "$temp_file"
     fi
 
-    printf '%s\n' "$start_marker" >> "$temp_file"
-    printf '%s\n' "$content" >> "$temp_file"
-    printf '%s\n' "$end_marker" >> "$temp_file"
+    {
+        printf '%s\n' "$start_marker"
+        printf '%s\n' "$content"
+        printf '%s\n' "$end_marker"
+    } >> "$temp_file"
     mv "$temp_file" "$file_path"
 }
 
@@ -575,7 +689,7 @@ uvm_file_has_unmanaged_mirror_config() {
         skip != 1 { print }
     ' "$file_path" > "$temp_file"
 
-    if grep -Eq '^[[:space:]]*\[\[index\]\][[:space:]]*$|^[[:space:]]*\[python-downloads\][[:space:]]*$' "$temp_file"; then
+    if grep -Eq '^[[:space:]]*\[\[index\]\][[:space:]]*$|^[[:space:]]*python-install-mirror[[:space:]]*=' "$temp_file"; then
         rm -f "$temp_file"
         return 0
     fi
@@ -589,10 +703,23 @@ setup_uv_mirror() {
     local uv_config_dir
     local uv_config_file
     local mirror_block
+    local validation_file
 
     # No URL provided: nothing to do (opt-in only)
     if [ -z "$mirror_url" ]; then
         return 0
+    fi
+
+    case "$mirror_url" in
+        https://*|http://*|file://*) ;;
+        *)
+            echo "Error: Mirror URL must use https://, http://, or file://" >&2
+            return 1
+            ;;
+    esac
+    if uvm_value_has_line_break "$mirror_url" || [[ "$mirror_url" == *'"'* ]]; then
+        echo "Error: Mirror URL contains unsupported characters" >&2
+        return 1
     fi
 
     uv_config_dir=$(uvm_get_uv_config_dir)
@@ -600,8 +727,8 @@ setup_uv_mirror() {
 
     mkdir -p "$uv_config_dir" || return 1
     if uvm_file_has_unmanaged_mirror_config "$uv_config_file"; then
-        echo "Warning: Existing unmanaged mirror config conflict detected in ${uv_config_file}; leaving file unchanged"
-        return 0
+        echo "Error: Existing unmanaged mirror config conflict detected in ${uv_config_file}; leaving file unchanged" >&2
+        return 1
     fi
 
     if [ -f "$uv_config_file" ] && [ ! -f "${uv_config_file}.backup" ]; then
@@ -612,17 +739,101 @@ setup_uv_mirror() {
 [[index]]
 url = "${mirror_url}"
 default = true
-
-[python-downloads]
-url = "${mirror_url%/simple*}"
 EOF
 )
+
+    if command -v uv >/dev/null 2>&1; then
+        validation_file=$(mktemp "${TMPDIR:-/tmp}/uvm-config-check.XXXXXX.toml") || return 1
+        printf '%s\n' "$mirror_block" > "$validation_file"
+        if ! uv --config-file "$validation_file" python list --only-installed >/dev/null 2>&1; then
+            rm -f "$validation_file"
+            echo "Error: Generated mirror configuration was rejected by uv" >&2
+            return 1
+        fi
+        rm -f "$validation_file"
+    fi
 
     uvm_upsert_managed_block \
         "$uv_config_file" \
         "$(uvm_get_mirror_start_marker)" \
         "$(uvm_get_mirror_end_marker)" \
         "$mirror_block"
+}
+
+uvm_trust_local_env() {
+    local env_path="$1"
+    local resolved_path
+    local trust_file
+
+    resolved_path=$(uvm_resolve_existing_path "$env_path" 2>/dev/null || uvm_resolve_target_path "$env_path") || {
+        echo "Error: Environment path could not be resolved: ${env_path}" >&2
+        return 1
+    }
+    uvm_is_valid_uv_env "$resolved_path" || {
+        echo "Error: Not a valid virtual environment: ${resolved_path}" >&2
+        return 1
+    }
+    uvm_value_has_line_break "$resolved_path" && {
+        echo "Error: Paths containing line breaks cannot be trusted" >&2
+        return 1
+    }
+
+    init_uvm_config || return 1
+    trust_file=$(uvm_get_trusted_envs_file)
+    uvm_acquire_metadata_lock || return 1
+    touch "$trust_file" || {
+        uvm_release_metadata_lock
+        return 1
+    }
+    local status_code=0
+    if ! grep -Fqx "$resolved_path" "$trust_file"; then
+        printf '%s\n' "$resolved_path" >> "$trust_file"
+        status_code=$?
+    fi
+    uvm_release_metadata_lock
+    [ "$status_code" -eq 0 ] || return "$status_code"
+    printf '%s\n' "$resolved_path"
+}
+
+uvm_untrust_local_env() {
+    local env_path="$1"
+    local resolved_path
+    local trust_file
+    local temp_file
+
+    resolved_path=$(uvm_resolve_existing_path "$env_path" 2>/dev/null || uvm_resolve_target_path "$env_path") || {
+        echo "Error: Environment path could not be resolved: ${env_path}" >&2
+        return 1
+    }
+    trust_file=$(uvm_get_trusted_envs_file)
+    [ -f "$trust_file" ] || return 0
+    uvm_acquire_metadata_lock || return 1
+    temp_file=$(mktemp "${TMPDIR:-/tmp}/uvm-trust.XXXXXX") || {
+        uvm_release_metadata_lock
+        return 1
+    }
+    grep -Fvx "$resolved_path" "$trust_file" > "$temp_file" || true
+    mv "$temp_file" "$trust_file"
+    local status_code=$?
+    uvm_release_metadata_lock
+    return "$status_code"
+}
+
+uvm_is_local_env_trusted() {
+    local env_path="$1"
+    local resolved_path
+    local trust_file
+
+    resolved_path=$(uvm_resolve_existing_path "$env_path") || return 1
+    trust_file=$(uvm_get_trusted_envs_file)
+    [ -f "$trust_file" ] && grep -Fqx "$resolved_path" "$trust_file"
+}
+
+uvm_list_trusted_local_envs() {
+    local trust_file
+    trust_file=$(uvm_get_trusted_envs_file)
+    [ -f "$trust_file" ] && cat "$trust_file"
+    return 0
 }
 
 detect_shell() {

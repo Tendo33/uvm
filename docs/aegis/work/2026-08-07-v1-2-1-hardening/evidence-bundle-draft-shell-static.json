@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "shell-static",
+  "type": "static-analysis",
+  "source": "ShellCheck 0.10.0, bash -n, Ruby YAML parse, git diff --check",
+  "summary": "All static, syntax, workflow YAML, and whitespace checks passed.",
+  "verifier": "Codex"
+}

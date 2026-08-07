@@ -8,7 +8,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-UVM_INSTALL_VERSION="1.2.0"
+UVM_INSTALL_VERSION="1.2.1"
 UVM_PATH_BLOCK_START="# >>> uvm path >>>"
 UVM_PATH_BLOCK_END="# <<< uvm path <<<"
 UVM_REPOSITORY="Tendo33/uvm"
@@ -194,6 +194,7 @@ configure_path() {
     print_info "Adding PATH block to ${shell_rc}"
 
     source_installed_config_lib
+    # shellcheck disable=SC2016 # Keep HOME dynamic in the installed shell block.
     uvm_upsert_managed_block \
         "$shell_rc" \
         "$UVM_PATH_BLOCK_START" \
@@ -240,6 +241,7 @@ initialize_config() {
 
     print_info "Initializing uvm configuration..."
     mkdir -p "$envs_dir"
+    envs_dir=$(cd "$envs_dir" && pwd -P)
 
     source_installed_config_lib
     export UVM_HOME
@@ -285,42 +287,57 @@ show_post_install() {
 }
 
 interactive_setup() {
-    local envs_dir="${HOME}/uv_envs"
-    local install_uv_choice="n"
-    local enable_auto_activation="y"
-    local mirror_url=""
     local choice
 
-    echo ""
-    echo "UVM installation wizard"
-    echo "-----------------------"
-    printf "Environment directory [%s]: " "$envs_dir"
+    UVM_SETUP_ENVS_DIR="${HOME}/uv_envs"
+    UVM_SETUP_INSTALL_UV="n"
+    UVM_SETUP_AUTO_ACTIVATION="y"
+    UVM_SETUP_MIRROR_URL=""
+
+    echo "" >&2
+    echo "UVM installation wizard" >&2
+    echo "-----------------------" >&2
+    printf "Environment directory [%s]: " "$UVM_SETUP_ENVS_DIR" >&2
     read -r choice
     if [ -n "$choice" ]; then
-        envs_dir="${choice/#\~/$HOME}"
+        UVM_SETUP_ENVS_DIR="${choice/#\~/$HOME}"
     fi
 
     if ! check_uv >/dev/null 2>&1; then
         if [ "$(detect_os)" = "windows" ]; then
-            print_warning "Install UV in PowerShell, then rerun this installer."
+            print_warning "Install UV in PowerShell, then rerun this installer." >&2
         else
-            printf "Install UV now? (Y/n): "
-            read -r install_uv_choice
-            install_uv_choice="${install_uv_choice:-y}"
+            printf "Install UV now? (Y/n): " >&2
+            read -r UVM_SETUP_INSTALL_UV
+            UVM_SETUP_INSTALL_UV="${UVM_SETUP_INSTALL_UV:-y}"
         fi
     fi
 
-    printf "Enable auto-activation? (Y/n): "
-    read -r enable_auto_activation
-    enable_auto_activation="${enable_auto_activation:-y}"
+    printf "Enable auto-activation? (Y/n): " >&2
+    read -r UVM_SETUP_AUTO_ACTIVATION
+    UVM_SETUP_AUTO_ACTIVATION="${UVM_SETUP_AUTO_ACTIVATION:-y}"
 
-    printf "Configure a PyPI mirror URL? (press Enter to skip): "
-    read -r mirror_url
+    printf "Configure a PyPI mirror URL? (press Enter to skip): " >&2
+    read -r UVM_SETUP_MIRROR_URL
+}
 
-    echo "$envs_dir"
-    echo "$install_uv_choice"
-    echo "$enable_auto_activation"
-    echo "$mirror_url"
+resolve_existing_envs_dir() {
+    local config_file="${UVM_HOME:-${HOME}/.config/uvm}/config"
+
+    if [ -n "${UVM_ENVS_DIR:-}" ]; then
+        printf '%s\n' "$UVM_ENVS_DIR"
+        return 0
+    fi
+    if [ -f "$config_file" ]; then
+        (
+            unset UVM_ENVS_DIR
+            # shellcheck source=/dev/null
+            source "$config_file"
+            printf '%s\n' "${UVM_ENVS_DIR:-${HOME}/uv_envs}"
+        )
+        return 0
+    fi
+    printf '%s\n' "${HOME}/uv_envs"
 }
 
 main() {
@@ -348,11 +365,19 @@ main() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --envs-dir)
+                if [ $# -lt 2 ] || [ -z "$2" ]; then
+                    print_error "--envs-dir requires a path"
+                    exit 1
+                fi
                 custom_envs_dir="$2"
                 non_interactive=true
                 shift 2
                 ;;
             --mirror)
+                if [ $# -lt 2 ] || [ -z "$2" ]; then
+                    print_error "--mirror requires a URL"
+                    exit 1
+                fi
                 custom_mirror_url="$2"
                 shift 2
                 ;;
@@ -389,14 +414,13 @@ EOF
     print_info "Detected OS: $(detect_os)"
 
     if [ "$non_interactive" = false ] && [ -z "$custom_envs_dir" ]; then
-        local config_result
-        config_result=$(interactive_setup)
-        custom_envs_dir=$(printf '%s\n' "$config_result" | sed -n '1p')
-        install_uv_choice=$(printf '%s\n' "$config_result" | sed -n '2p')
-        enable_auto_activation=$(printf '%s\n' "$config_result" | sed -n '3p')
-        custom_mirror_url=$(printf '%s\n' "$config_result" | sed -n '4p')
+        interactive_setup
+        custom_envs_dir="$UVM_SETUP_ENVS_DIR"
+        install_uv_choice="$UVM_SETUP_INSTALL_UV"
+        enable_auto_activation="$UVM_SETUP_AUTO_ACTIVATION"
+        custom_mirror_url="$UVM_SETUP_MIRROR_URL"
     else
-        custom_envs_dir="${custom_envs_dir:-${HOME}/uv_envs}"
+        custom_envs_dir="${custom_envs_dir:-$(resolve_existing_envs_dir)}"
         print_info "Running in non-interactive mode"
     fi
 

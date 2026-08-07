@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Comprehensively improve uvm against the audited correctness, security, release, test, and documentation gaps.",
+  "goal": "Comprehensively improve uvm against the audited correctness, security, release, test, and documentation gaps.",
+  "successEvidence": [
+    "Focused regressions, real uv integration tests, full BATS suite, syntax and static checks pass; version and docs align; no unsafe auto-activation or invalid uv config remains."
+  ],
+  "stopCondition": "Done when all scoped findings are repaired and verified; otherwise report blocked, needs-verification, or scope-exceeded with residual risk.",
+  "nonGoals": [
+    "Commit, push, tag, publish, or mutate installed user configuration."
+  ],
+  "scope": "Local source, tests, CI workflows, installer/update behavior, shell trust model, mirror config, release metadata, and documentation for v1.2.1.",
+  "changeKinds": [
+    "architecture-hardening"
+  ],
+  "riskHints": [
+    "Shell code execution boundary, destructive environment operations, cross-platform Bash compatibility, and release integrity."
+  ]
+}

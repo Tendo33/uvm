@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main, dev]
   pull_request:
@@ -11,16 +12,17 @@ jobs:
     name: ShellCheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ludeeus/action-shellcheck@master
-        with:
-          severity: warning
-          scandir: .
-          ignore_paths: >-
-            .git
-            .history
-            .specify
-            .claude
+      - uses: actions/checkout@v5
+      - name: Run ShellCheck
+        run: |
+          shellcheck -x \
+            bin/uvm \
+            lib/uvm-config.sh \
+            lib/uvm-core.sh \
+            lib/uvm-shell-hooks.sh \
+            install.sh \
+            uninstall.sh \
+            completions/uvm.bash
 
   syntax:
     name: Syntax Check (${{ matrix.os }})
@@ -33,8 +35,9 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - run: |
+      - uses: actions/checkout@v5
+      - name: Check Bash syntax
+        run: |
           bash -n bin/uvm
           bash -n lib/uvm-config.sh
           bash -n lib/uvm-core.sh
@@ -42,21 +45,25 @@ jobs:
           bash -n install.sh
           bash -n uninstall.sh
           bash -n completions/uvm.bash
-          # BATS files use @test syntax and are validated by the bats job below.
 
   bats:
-    name: BATS Tests (${{ matrix.os }})
+    name: BATS (${{ matrix.os }}, uv ${{ matrix.uv-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        uv-version: ["0.10.0", "0.12.2"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - name: Install bats-core
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v9
+        with:
+          version: ${{ matrix.uv-version }}
+          enable-cache: false
+      - name: Install pinned bats-core
         run: |
-          git clone --depth 1 https://github.com/bats-core/bats-core.git "$RUNNER_TEMP/bats-core"
+          git clone --depth 1 --branch v1.12.0 \
+            https://github.com/bats-core/bats-core.git "$RUNNER_TEMP/bats-core"
           echo "$RUNNER_TEMP/bats-core/bin" >> "$GITHUB_PATH"
       - name: Run test suite
         run: bats tests/uvm.bats
@@ -68,8 +75,11 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v9
+        with:
+          version: "0.12.2"
+          enable-cache: false
       - name: Install uvm
         run: |
           bash install.sh -y
@@ -82,23 +92,37 @@ jobs:
           type uvm
           uvm doctor
           uvm list
-      - name: Create, activate, and delete environment
+      - name: Create, activate, export, rename, and delete environment
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           eval "$("$HOME/.local/bin/uvm" shell-hook)"
           uvm create smoke-win --python 3.11
-          uvm list
           uvm activate smoke-win
           python --version
           uvm deactivate
-          uvm delete smoke-win --force
-          uvm list
-      - name: Verify new commands are dispatched
+          uvm export smoke-win
+          uvm rename smoke-win smoke-renamed
+          uvm delete smoke-renamed --force
+          uvm list --json
+
+  consistency:
+    name: Release and documentation consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate 1.2.1 declarations and retired paths
         run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          uvm help | grep -q "run"
-          uvm help | grep -q "rename"
-          uvm help | grep -q "clone"
-          uvm help | grep -q "export"
-          uvm help | grep -q "import"
-          uvm help | grep -q "update"
+          grep -q 'UVM_VERSION="1.2.1"' bin/uvm
+          grep -q 'UVM_INSTALL_VERSION="1.2.1"' install.sh
+          grep -q '^## \[1.2.1\]' CHANGELOG.md
+          grep -q '1.2.1' README.md
+          grep -q '1.2.1' README_CN.md
+          if grep -R -n '\[python-downloads\]' \
+              README.md README_CN.md EXAMPLES.md project_document templates lib; then
+            echo "Retired invalid [python-downloads] table is still documented or emitted"
+            exit 1
+          fi
+          if grep -R -n 'python.*-m pip' lib tests; then
+            echo "Retired python -m pip path is still present"
+            exit 1
+          fi

@@ -395,7 +395,7 @@ cat ~/.config/uv/uv.toml
 
 # 应该显示清华镜像
 # 如果没有，重新配置
-uvm config mirror
+uvm config mirror set https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 使用 uv pip 代替 pip
 uv pip install package  # 快得多

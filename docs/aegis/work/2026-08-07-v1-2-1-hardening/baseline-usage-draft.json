@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-08-07-v1-2-1-hardening",
+  "requiredBaselineRefs": [
+    "README.md",
+    "project_document/main.md",
+    "CHANGELOG.md"
+  ],
+  "deliveredContextRefs": [],
+  "acknowledgedBeforePlanRefs": [
+    "README.md",
+    "project_document/main.md",
+    "CHANGELOG.md"
+  ],
+  "citedInPlanRefs": [
+    "docs/aegis/specs/2026-08-07-v1-2-1-hardening-design.md",
+    "docs/aegis/plans/2026-08-07-v1-2-1-hardening.md"
+  ],
+  "missingRefs": [],
+  "decision": "continue"
+}

@@ -4,6 +4,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/uvm-config.sh
 source "${SCRIPT_DIR}/uvm-config.sh"
 
+uvm_cleanup_created_env() {
+    local env_name="$1"
+    local env_path="$2"
+    local default_root
+
+    remove_env_record "$env_name" >/dev/null 2>&1 || true
+    [ -e "$env_path" ] || return 0
+    default_root=$(uvm_get_default_envs_dir)
+    [ -d "$default_root" ] || return 1
+    if uvm_path_is_within "$default_root" "$env_path" && [ "$(basename "$env_path")" = "$env_name" ]; then
+        rm -rf "$env_path"
+        return $?
+    fi
+    echo "Warning: Partial environment was not removed because it is outside the managed root: ${env_path}" >&2
+    return 1
+}
+
 uvm_env_is_safe_delete_target() {
     local env_name="$1"
     local env_path="$2"
@@ -41,10 +58,18 @@ uvm_create() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --python)
+                if [ $# -lt 2 ] || [ -z "$2" ]; then
+                    echo "Error: --python requires a value"
+                    return 1
+                fi
                 python_version="$2"
                 shift 2
                 ;;
             --path)
+                if [ $# -lt 2 ] || [ -z "$2" ]; then
+                    echo "Error: --path requires a value"
+                    return 1
+                fi
                 custom_path="$2"
                 shift 2
                 ;;
@@ -90,11 +115,18 @@ uvm_create() {
     fi
 
     if [ -n "$custom_path" ]; then
-        env_path="$custom_path"
-        mkdir -p "$(dirname "$env_path")" || return 1
+        if uvm_value_has_line_break "$custom_path"; then
+            echo "Error: Environment paths cannot contain line breaks"
+            return 1
+        fi
+        mkdir -p "$(dirname "$custom_path")" || return 1
+        env_path=$(uvm_resolve_target_path "$custom_path") || {
+            echo "Error: Could not resolve environment path: ${custom_path}"
+            return 1
+        }
     else
-        env_path="$(uvm_get_default_envs_dir)/${env_name}"
         mkdir -p "$(uvm_get_default_envs_dir)" || return 1
+        env_path=$(uvm_resolve_target_path "$(uvm_get_default_envs_dir)/${env_name}") || return 1
     fi
 
     if [ -e "$env_path" ]; then
@@ -111,7 +143,11 @@ uvm_create() {
     fi
 
     actual_python_version=$(get_env_python_version "$env_path")
-    add_env_record "$env_name" "$env_path" "$actual_python_version" || return 1
+    if ! add_env_record "$env_name" "$env_path" "$actual_python_version"; then
+        echo "Error: Failed to register environment; removing the newly created directory" >&2
+        rm -rf "$env_path"
+        return 1
+    fi
 
     echo "Environment '${env_name}' created successfully"
     echo "  Location: ${env_path}"
@@ -177,6 +213,11 @@ uvm_run() {
 }
 
 uvm_rename() {
+    if [ "$#" -ne 2 ]; then
+        echo "Error: Exactly two environment names are required"
+        echo "Usage: uvm rename <old_name> <new_name>"
+        return 1
+    fi
     local old_name="$1"
     local new_name="$2"
 
@@ -209,34 +250,22 @@ uvm_rename() {
         return 1
     fi
 
-    local new_path="$old_path"
-    local default_root
-    default_root=$(uvm_get_default_envs_dir)
-
-    # If env lives under UVM_ENVS_DIR, rename the directory too
-    if uvm_path_is_within "$default_root" "$old_path" 2>/dev/null; then
-        new_path="${default_root}/${new_name}"
-        mv "$old_path" "$new_path" || {
-            echo "Error: Failed to move environment directory"
-            return 1
-        }
-    fi
-
-    # Reload python version from old record before removing it
-    local python_version="unknown"
-    if uvm_load_env_record "$old_name"; then
-        python_version="${UVM_RECORD_PYTHON:-unknown}"
-    fi
-
-    remove_env_record "$old_name" || return 1
-    add_env_record "$new_name" "$new_path" "$python_version" || return 1
+    rename_env_record "$old_name" "$new_name" || {
+        echo "Error: Failed to rename environment metadata"
+        return 1
+    }
 
     echo "Environment '${old_name}' renamed to '${new_name}'"
-    [ "$new_path" != "$old_path" ] && echo "  New location: ${new_path}"
+    echo "  Location unchanged: ${old_path}"
     return 0
 }
 
 uvm_clone() {
+    if [ "$#" -ne 2 ]; then
+        echo "Error: Exactly two environment names are required"
+        echo "Usage: uvm clone <src_name> <dst_name>"
+        return 1
+    fi
     local src_name="$1"
     local dst_name="$2"
 
@@ -266,38 +295,71 @@ uvm_clone() {
     local python_version
     python_version=$(get_env_python_version "$src_path")
 
+    local src_python
+    src_python=$(uvm_env_python_binary "$src_path") || {
+        echo "Error: Python binary not found in source environment"
+        return 1
+    }
+
+    local requirements_file
+    requirements_file=$(mktemp "${TMPDIR:-/tmp}/uvm-clone.XXXXXX.txt") || return 1
+    if ! uv pip freeze --python "$src_python" > "$requirements_file"; then
+        rm -f "$requirements_file"
+        echo "Error: Failed to inspect packages in '${src_name}'"
+        return 1
+    fi
+
     local dst_path
-    dst_path="$(uvm_get_default_envs_dir)/${dst_name}"
     mkdir -p "$(uvm_get_default_envs_dir)" || return 1
+    dst_path=$(uvm_resolve_target_path "$(uvm_get_default_envs_dir)/${dst_name}") || {
+        rm -f "$requirements_file"
+        return 1
+    }
+    if [ -e "$dst_path" ]; then
+        rm -f "$requirements_file"
+        echo "Error: Destination path already exists: ${dst_path}"
+        return 1
+    fi
 
     echo "Cloning '${src_name}' -> '${dst_name}'..."
     echo "  Python: ${python_version}"
 
     if [ -n "$python_version" ] && [ "$python_version" != "unknown" ]; then
-        uv venv "$dst_path" --python "$python_version" || return 1
+        uv venv "$dst_path" --python "$python_version" || {
+            rm -f "$requirements_file"
+            return 1
+        }
     else
-        uv venv "$dst_path" || return 1
+        uv venv "$dst_path" || {
+            rm -f "$requirements_file"
+            return 1
+        }
     fi
 
-    # Copy installed packages from source to destination
-    local src_python
-    src_python=$(uvm_env_python_binary "$src_path" || true)
-    if [ -n "$src_python" ] && [ -f "$src_python" ]; then
+    if [ -s "$requirements_file" ]; then
+        local dst_python
+        dst_python=$(uvm_env_python_binary "$dst_path") || {
+            rm -f "$requirements_file"
+            uvm_cleanup_created_env "$dst_name" "$dst_path" || true
+            return 1
+        }
         echo "  Copying installed packages..."
-        local requirements
-        requirements=$(VIRTUAL_ENV="$src_path" "$src_python" -m pip freeze 2>/dev/null || true)
-        if [ -n "$requirements" ]; then
-            local dst_python
-            dst_python=$(uvm_env_python_binary "$dst_path" || true)
-            if [ -n "$dst_python" ] && [ -f "$dst_python" ]; then
-                echo "$requirements" | VIRTUAL_ENV="$dst_path" "$dst_python" -m pip install -q -r /dev/stdin || true
-            fi
+        if ! uv pip install --python "$dst_python" -r "$requirements_file"; then
+            rm -f "$requirements_file"
+            uvm_cleanup_created_env "$dst_name" "$dst_path" || true
+            echo "Error: Failed to install cloned packages"
+            return 1
         fi
     fi
+    rm -f "$requirements_file"
 
     local actual_python
     actual_python=$(get_env_python_version "$dst_path")
-    add_env_record "$dst_name" "$dst_path" "$actual_python" || return 1
+    if ! add_env_record "$dst_name" "$dst_path" "$actual_python"; then
+        uvm_cleanup_created_env "$dst_name" "$dst_path" || true
+        echo "Error: Failed to register cloned environment" >&2
+        return 1
+    fi
 
     echo "Environment '${dst_name}' cloned from '${src_name}'"
     echo "  Location: ${dst_path}"
@@ -305,6 +367,11 @@ uvm_clone() {
 }
 
 uvm_export() {
+    if [ "$#" -ne 1 ]; then
+        echo "Error: Exactly one environment name is required" >&2
+        echo "Usage: uvm export <env_name>" >&2
+        return 1
+    fi
     local env_name="$1"
 
     if [ -z "$env_name" ]; then
@@ -322,10 +389,11 @@ uvm_export() {
     local python_bin
     python_bin=$(uvm_env_python_binary "$env_path") || {
         echo "Error: Python binary not found in: ${env_path}" >&2
+        uvm_cleanup_created_env "$env_name" "$env_path" || true
         return 1
     }
 
-    VIRTUAL_ENV="$env_path" "$python_bin" -m pip freeze
+    uv pip freeze --python "$python_bin"
 }
 
 uvm_import() {
@@ -335,6 +403,10 @@ uvm_import() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --from)
+                if [ $# -lt 2 ] || [ -z "$2" ]; then
+                    echo "Error: --from requires a value"
+                    return 1
+                fi
                 from_file="$2"
                 shift 2
                 ;;
@@ -376,7 +448,11 @@ uvm_import() {
     }
 
     echo "Installing packages from ${from_file}..."
-    VIRTUAL_ENV="$env_path" "$python_bin" -m pip install -r "$from_file" || return 1
+    if ! uv pip install --python "$python_bin" -r "$from_file"; then
+        echo "Error: Import failed; removing the newly created environment" >&2
+        uvm_cleanup_created_env "$env_name" "$env_path" || true
+        return 1
+    fi
     echo "Import complete"
 }
 
@@ -447,6 +523,9 @@ uvm_delete() {
             *)
                 if [ -z "$env_name" ]; then
                     env_name="$1"
+                else
+                    echo "Error: Too many arguments"
+                    return 1
                 fi
                 shift
                 ;;
@@ -499,8 +578,17 @@ uvm_delete() {
 }
 
 uvm_self_update() {
+    if [ "$#" -gt 1 ]; then
+        echo "Error: Usage: uvm update [v<version>]"
+        return 1
+    fi
     local channel="${1:-latest}"
     local install_url
+
+    if [ "$channel" != "latest" ] && [[ ! "$channel" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+        echo "Error: Update target must be 'latest' or a version tag such as v1.2.1"
+        return 1
+    fi
 
     if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
         echo "Error: curl or wget is required for uvm update"
@@ -508,7 +596,7 @@ uvm_self_update() {
     fi
 
     if [ "$channel" = "latest" ]; then
-        install_url="https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh"
+        install_url="https://github.com/Tendo33/uvm/releases/latest/download/install.sh"
     else
         install_url="https://raw.githubusercontent.com/Tendo33/uvm/${channel}/install.sh"
     fi
@@ -531,8 +619,29 @@ uvm_self_update() {
         }
     fi
 
-    bash "$tmp_install" -y
+    local downloaded_version
+    downloaded_version=$(sed -n 's/^UVM_INSTALL_VERSION="\([^"]*\)"/\1/p' "$tmp_install" | head -n 1)
+    if [ -z "$downloaded_version" ]; then
+        rm -f "$tmp_install"
+        echo "Error: Downloaded installer does not declare a version"
+        return 1
+    fi
+    if [[ ! "$downloaded_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+        rm -f "$tmp_install"
+        echo "Error: Downloaded installer declares an invalid version"
+        return 1
+    fi
+    if [ -n "${UVM_VERSION:-}" ] && ! uvm_version_is_at_least "$downloaded_version" "$UVM_VERSION"; then
+        rm -f "$tmp_install"
+        echo "Error: Refusing to downgrade uvm ${UVM_VERSION} to ${downloaded_version}"
+        return 1
+    fi
+
+    UVM_HOME="$(uvm_get_home)" UVM_ENVS_DIR="$(uvm_get_default_envs_dir)" \
+        bash "$tmp_install" -y --envs-dir "$(uvm_get_default_envs_dir)"
+    local update_status=$?
     rm -f "$tmp_install"
+    return "$update_status"
 }
 
 uvm_print_env_entry() {
@@ -641,7 +750,10 @@ _uvm_list_json() {
             [ "$first" = true ] || printf ',\n'
             first=false
             printf '  {"name":"%s","path":"%s","python":"%s","active":%s,"source":"managed"}' \
-                "$env_name" "$env_path" "${UVM_RECORD_PYTHON:-unknown}" "$active"
+                "$(uvm_json_escape "$env_name")" \
+                "$(uvm_json_escape "$env_path")" \
+                "$(uvm_json_escape "${UVM_RECORD_PYTHON:-unknown}")" \
+                "$active"
             seen_names="${seen_names}
 ${env_name}"
         fi
@@ -665,7 +777,10 @@ ${env_name}"
                 [ "$first" = true ] || printf ',\n'
                 first=false
                 printf '  {"name":"%s","path":"%s","python":"%s","active":%s,"source":"discovered"}' \
-                    "$env_name" "$env_dir" "$py_ver" "$active"
+                    "$(uvm_json_escape "$env_name")" \
+                    "$(uvm_json_escape "$env_dir")" \
+                    "$(uvm_json_escape "$py_ver")" \
+                    "$active"
                 seen_names="${seen_names}
 ${env_name}"
             fi
@@ -759,6 +874,13 @@ uvm_doctor() {
     else
         echo "Auto activated    : no"
     fi
+
+    if [ -n "${UVM_UNTRUSTED_LOCAL_ENV:-}" ]; then
+        echo "Local .venv trust : REQUIRED (${UVM_UNTRUSTED_LOCAL_ENV})"
+        echo "  -> Review first, then run: uvm trust '${UVM_UNTRUSTED_LOCAL_ENV}'"
+    else
+        echo "Local .venv trust : no pending environment"
+    fi
 }
 
 uvm_repair() {
@@ -821,6 +943,9 @@ COMMANDS:
     repair                     Rebuild metadata and shell hook
     doctor                     Diagnose shell integration and metadata health
     update                     Update uvm to the latest release
+    trust [path]               Trust a local .venv for auto-activation
+    trust list                 List trusted local environments
+    untrust [path]             Revoke local .venv auto-activation trust
     help                       Show this help message
 
 CONFIG:
@@ -834,7 +959,7 @@ AUTO-ACTIVATION:
         eval "$(uvm shell-hook)"
 
     Priority:
-      1. Nearest parent .venv
+      1. Nearest trusted parent .venv
       2. Nearest parent .uvmrc
 
 CONFIGURATION:

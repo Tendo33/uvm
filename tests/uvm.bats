@@ -38,6 +38,11 @@ export PATH
 EOF
 }
 
+make_real_env() {
+    local env_path="$1"
+    uv venv "$env_path" --python 3.12 >/dev/null
+}
+
 load_install_functions() {
     mkdir -p "${HOME}/.local/lib/uvm"
     cp "${BATS_TEST_DIRNAME}/../lib/uvm-config.sh" "${HOME}/.local/lib/uvm/uvm-config.sh"
@@ -96,10 +101,12 @@ load_completion_script() {
 
     [ "$status" -eq 0 ]
     [ -d "$custom_path" ]
+    local resolved_custom
+    resolved_custom=$(cd "$custom_path" && pwd -P)
     run uvm_list
     [ "$status" -eq 0 ]
     [[ "$output" == *"customenv"* ]]
-    [[ "$output" == *"$custom_path"* ]]
+    [[ "$output" == *"$resolved_custom"* ]]
 }
 
 @test "managed metadata uses UVM_HOME and stores one record per environment" {
@@ -168,7 +175,7 @@ EOF
     [[ "$output" == *"not found"* ]]
 }
 
-@test "uvm_rename renames managed environment record and directory" {
+@test "uvm_rename changes the managed name without moving the environment" {
     init_uvm_config
     make_fake_env "${UVM_ENVS_DIR}/oldname"
     add_env_record "oldname" "${UVM_ENVS_DIR}/oldname" "3.11.9"
@@ -178,8 +185,10 @@ EOF
 
     [ ! -f "${UVM_HOME}/envs.d/oldname.env" ]
     [ -f "${UVM_HOME}/envs.d/newname.env" ]
-    [ -d "${UVM_ENVS_DIR}/newname" ]
-    [ ! -d "${UVM_ENVS_DIR}/oldname" ]
+    [ ! -d "${UVM_ENVS_DIR}/newname" ]
+    [ -d "${UVM_ENVS_DIR}/oldname" ]
+    run get_env_path "newname"
+    [ "$output" = "${UVM_ENVS_DIR}/oldname" ]
 }
 
 @test "uvm_rename for custom-path env only renames record, not directory" {
@@ -217,7 +226,7 @@ EOF
 
 @test "uvm_clone creates new environment record from source" {
     init_uvm_config
-    make_fake_env "${UVM_ENVS_DIR}/srcenv"
+    make_real_env "${UVM_ENVS_DIR}/srcenv"
     add_env_record "srcenv" "${UVM_ENVS_DIR}/srcenv" "3.12.1"
 
     run uvm_clone "srcenv" "dstenv"
@@ -238,23 +247,24 @@ EOF
     [[ "$output" == *"already exists"* ]]
 }
 
-@test "uvm_export outputs pip freeze from named environment" {
+@test "uvm_export works for a standard unseeded uv environment" {
     init_uvm_config
-    make_fake_env "${UVM_ENVS_DIR}/exportenv"
-    # Provide a fake python that mimics pip freeze
-    cat > "${UVM_ENVS_DIR}/exportenv/bin/python" <<'EOF'
-#!/bin/bash
-if [[ "$*" == *"freeze"* ]]; then
-    echo "requests==2.31.0"
-    echo "urllib3==2.0.7"
-fi
-EOF
-    chmod +x "${UVM_ENVS_DIR}/exportenv/bin/python"
+    make_real_env "${UVM_ENVS_DIR}/exportenv"
     add_env_record "exportenv" "${UVM_ENVS_DIR}/exportenv" "3.12.1"
 
     run uvm_export "exportenv"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"requests==2.31.0"* ]]
+}
+
+@test "uvm_import works for an empty requirements file without seeded pip" {
+    init_uvm_config
+    local requirements="${TEST_HOME}/requirements.txt"
+    : > "$requirements"
+
+    run uvm_import "importenv" --from "$requirements"
+
+    [ "$status" -eq 0 ]
+    [ -f "${UVM_HOME}/envs.d/importenv.env" ]
 }
 
 @test "uvm_import fails when requirements file does not exist" {
@@ -277,6 +287,18 @@ EOF
     [[ "$output" == *'"path"'* ]]
     [[ "$output" == *'"source"'* ]]
     [[ "$output" == "]" ]] || [[ "$output" == *$'\n]' ]]
+}
+
+@test "uvm_list --json escapes quotes in custom paths" {
+    init_uvm_config
+    local custom_path="${TEST_HOME}/custom\"quote/json-env"
+    make_fake_env "$custom_path"
+    add_env_record "json-env" "$custom_path" "3.12.1"
+
+    run uvm_list --json
+
+    [ "$status" -eq 0 ]
+    printf '%s\n' "$output" | python3 -m json.tool >/dev/null
 }
 
 @test "uvm_auto_activate inherits .uvmrc from a parent directory" {
@@ -386,25 +408,26 @@ EOF
     [ -f "$uv_config_file" ]
     grep -q "pypi.tuna.tsinghua.edu.cn" "$uv_config_file"
     grep -q "# >>> uvm mirror >>>" "$uv_config_file"
+    ! grep -q '\[python-downloads\]' "$uv_config_file"
+    uv --config-file "$uv_config_file" python list --only-installed >/dev/null
 }
 
-@test "setup_uv_mirror leaves existing unmanaged python-downloads config untouched" {
+@test "setup_uv_mirror leaves an unmanaged python-install-mirror untouched" {
     local uv_config_dir="${HOME}/.config/uv"
     local uv_config_file="${uv_config_dir}/uv.toml"
 
     mkdir -p "$uv_config_dir"
     cat > "$uv_config_file" <<'EOF'
-[python-downloads]
-url = "https://example.com/python"
+python-install-mirror = "https://example.com/python"
 EOF
 
     run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
 
-    [ "$status" -eq 0 ]
+    [ "$status" -ne 0 ]
     [[ "$output" == *"conflict"* ]]
     run cat "$uv_config_file"
     [ "$status" -eq 0 ]
-    [[ "$output" == *'url = "https://example.com/python"'* ]]
+    [[ "$output" == *'python-install-mirror = "https://example.com/python"'* ]]
     [[ "$output" != *"# >>> uvm mirror >>>"* ]]
 }
 
@@ -489,6 +512,36 @@ EOF
     [ ! -d "${TEST_HOME}/.config/uvm" ]
 }
 
+@test "interactive_setup exposes prompts separately from structured choices" {
+    load_install_functions
+
+    interactive_setup <<< $'\n\n\n'
+
+    [ "$UVM_SETUP_ENVS_DIR" = "${HOME}/uv_envs" ]
+    [ "$UVM_SETUP_AUTO_ACTIVATION" = "y" ]
+    [ -z "$UVM_SETUP_MIRROR_URL" ]
+}
+
+@test "non-interactive reinstall preserves the configured environments directory" {
+    load_install_functions
+    local configured_envs="${TEST_HOME}/existing envs"
+    mkdir -p "$configured_envs" "$UVM_HOME"
+    printf 'UVM_ENVS_DIR=%q\n' "$configured_envs" > "${UVM_HOME}/config"
+    unset UVM_ENVS_DIR
+
+    run resolve_existing_envs_dir
+
+    [ "$status" -eq 0 ]
+    [ "$output" = "$configured_envs" ]
+}
+
+@test "installer rejects a missing value option immediately" {
+    run env HOME="$TEST_HOME" bash "${BATS_TEST_DIRNAME}/../install.sh" --envs-dir
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"requires a path"* ]]
+}
+
 @test "install_uvm stores templates under the effective UVM_HOME" {
     load_install_functions
     export UVM_HOME="${TEST_HOME}/custom-uvm-home"
@@ -520,6 +573,78 @@ EOF
     [ "$output" = "https://raw.githubusercontent.com/Tendo33/uvm/main" ]
 }
 
+@test "uvm update refuses a downloaded downgrade" {
+    local fake_bin="${TEST_HOME}/fake-bin"
+    local fake_installer="${TEST_HOME}/old-install.sh"
+    mkdir -p "$fake_bin"
+    cat > "$fake_installer" <<'EOF'
+#!/bin/bash
+UVM_INSTALL_VERSION="1.2.0"
+EOF
+    cat > "${fake_bin}/curl" <<'EOF'
+#!/bin/bash
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = "-o" ]; then
+        cp "$UVM_FAKE_INSTALLER" "$2"
+        exit 0
+    fi
+    shift
+done
+exit 1
+EOF
+    chmod +x "${fake_bin}/curl"
+    export UVM_FAKE_INSTALLER="$fake_installer"
+    PATH="${fake_bin}:${PATH}"
+    UVM_VERSION="1.2.1"
+
+    run uvm_self_update latest
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Refusing to downgrade"* ]]
+}
+
+@test "uvm update preserves UVM_HOME and UVM_ENVS_DIR" {
+    local fake_bin="${TEST_HOME}/fake-bin"
+    local fake_installer="${TEST_HOME}/new-install.sh"
+    export UVM_UPDATE_MARKER="${TEST_HOME}/update-marker"
+    mkdir -p "$fake_bin" "$UVM_HOME" "$UVM_ENVS_DIR"
+    cat > "$fake_installer" <<'EOF'
+#!/bin/bash
+UVM_INSTALL_VERSION="1.2.2"
+printf 'home=%s\nenvs=%s\n' "$UVM_HOME" "$UVM_ENVS_DIR" > "$UVM_UPDATE_MARKER"
+printf 'arg=%s\n' "$@" >> "$UVM_UPDATE_MARKER"
+EOF
+    cat > "${fake_bin}/curl" <<'EOF'
+#!/bin/bash
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = "-o" ]; then
+        cp "$UVM_FAKE_INSTALLER" "$2"
+        exit 0
+    fi
+    shift
+done
+exit 1
+EOF
+    chmod +x "${fake_bin}/curl"
+    export UVM_FAKE_INSTALLER="$fake_installer"
+    PATH="${fake_bin}:${PATH}"
+    UVM_VERSION="1.2.1"
+
+    run uvm_self_update latest
+
+    [ "$status" -eq 0 ]
+    grep -Fqx "home=${UVM_HOME}" "$UVM_UPDATE_MARKER"
+    grep -Fqx "envs=${UVM_ENVS_DIR}" "$UVM_UPDATE_MARKER"
+    grep -Fqx "arg=--envs-dir" "$UVM_UPDATE_MARKER"
+    grep -Fqx "arg=${UVM_ENVS_DIR}" "$UVM_UPDATE_MARKER"
+}
+
+@test "uvm update rejects non-version remote targets" {
+    run uvm_self_update "main"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"version tag"* ]]
+}
+
 @test "bash completion script lists environment names from envs.d" {
     init_uvm_config
     make_fake_env "${UVM_ENVS_DIR}/comp-env-1"
@@ -534,17 +659,70 @@ EOF
     [[ "$output" == *"comp-env-2"* ]]
 }
 
-@test "uvm_find_upward_local_env also activates non-uvm .venv if it is a valid venv" {
-    # Intentional: auto-activation is not restricted to uvm-created environments.
-    # Any directory named .venv with pyvenv.cfg and an activate script is activated.
+@test "local .venv requires explicit trust before auto-activation" {
     init_uvm_config
     local non_uvm_venv="${TEST_HOME}/project/.venv"
     make_fake_env "$non_uvm_venv"
 
     cd "${TEST_HOME}/project"
-    run uvm_find_upward_local_env
+    uvm_auto_activate
+    [ -z "${VIRTUAL_ENV:-}" ]
+    [ -n "${UVM_UNTRUSTED_LOCAL_ENV:-}" ]
+
+    uvm_trust_local_env "$non_uvm_venv" >/dev/null
+    uvm_auto_activate
+    [ "$VIRTUAL_ENV" = "$non_uvm_venv" ]
+
+    cd "$OLDPWD"
+}
+
+@test "uvm trust --list exposes trusted canonical paths" {
+    init_uvm_config
+    local local_env="${TEST_HOME}/trusted-project/.venv"
+    make_fake_env "$local_env"
+    uvm_trust_local_env "$local_env" >/dev/null
+
+    run "${BATS_TEST_DIRNAME}/../bin/uvm" trust --list
+
     [ "$status" -eq 0 ]
-    [ "$output" = "$non_uvm_venv" ]
+    [ "$output" = "$(cd "$local_env" && pwd -P)" ]
+}
+
+@test "untrusted local activation script is never sourced" {
+    init_uvm_config
+    local local_env="${TEST_HOME}/malicious/.venv"
+    local probe="${TEST_HOME}/activation-probe"
+    make_fake_env "$local_env"
+    printf 'touch %q\n' "$probe" >> "${local_env}/bin/activate"
+
+    cd "${TEST_HOME}/malicious"
+    uvm_auto_activate
+
+    [ ! -e "$probe" ]
+    [ -z "${VIRTUAL_ENV:-}" ]
+    cd "$OLDPWD"
+}
+
+@test "value-taking options reject missing values without looping" {
+    run uvm_create "example" --path
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"requires a value"* ]]
+
+    run uvm_import "example" --from
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"requires a value"* ]]
+}
+
+@test "relative custom paths are stored as canonical absolute paths" {
+    init_uvm_config
+    mkdir -p "${TEST_HOME}/relative-work"
+    cd "${TEST_HOME}/relative-work"
+
+    run uvm_create "relative" --path "relative-env"
+    [ "$status" -eq 0 ]
+    run get_env_path "relative"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(cd relative-env && pwd -P)" ]
 
     cd "$OLDPWD"
 }

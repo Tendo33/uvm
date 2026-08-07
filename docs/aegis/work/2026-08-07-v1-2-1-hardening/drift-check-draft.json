@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "2026-08-07-v1-2-1-hardening",
+  "taskIntentRef": "docs/aegis/work/2026-08-07-v1-2-1-hardening/task-intent-draft.json",
+  "baselineRefs": [
+    "README.md",
+    "project_document/main.md",
+    "CHANGELOG.md"
+  ],
+  "scopeStatus": "aligned",
+  "compatStatus": "public commands and env records preserved; unsafe internals intentionally retired",
+  "retirementStatus": "invalid TOML, python -m pip, physical rename, and untrusted auto-source paths absent",
+  "newRiskSignals": [],
+  "decision": "continue"
+}

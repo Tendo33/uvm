@@ -7,6 +7,31 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.1] — 2026-08-07
+
+### Added
+- Explicit `uvm trust`, `uvm untrust`, and `uvm trust --list` controls for local project virtual environments
+- CI coverage across Ubuntu, macOS, Windows Git Bash, uv 0.10.0, and uv 0.12.2
+
+### Changed
+- Package clone, export, and import now use `uv pip --python` and work with standard uv environments that do not contain pip
+- `rename` now changes only the managed name and preserves the virtual environment directory
+- Custom environment paths and installer environment roots are stored as canonical absolute paths
+- Self-update preserves the configured environment root and refuses to install an older release
+- Release creation now depends on the reusable quality workflow
+
+### Fixed
+- Mirror configuration now emits only supported `[[index]]` TOML and validates it with uv before installation
+- JSON output now escapes names, paths, versions, and timestamps correctly
+- Missing CLI and installer option values now fail immediately instead of looping or shifting invalid arguments
+- Clone and import failures are propagated and partially-created managed environments are rolled back
+- Interactive installer answers are no longer lost through command substitution
+- Bash prompt hooks preserve command exit status and support both scalar and array `PROMPT_COMMAND`
+
+### Security
+- Local `.venv/bin/activate` scripts are never sourced by automatic activation until the canonical environment path is explicitly trusted
+- Mirror URLs reject unsafe characters and unmanaged mirror ownership is detected before writing
+
 ## [1.2.0] — 2026-04-26
 
 ### Added
@@ -139,7 +164,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-[Unreleased]: https://github.com/Tendo33/uvm/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/Tendo33/uvm/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/Tendo33/uvm/releases/tag/v1.2.1
+[1.2.0]: https://github.com/Tendo33/uvm/releases/tag/v1.2.0
 [1.1.1]: https://github.com/Tendo33/uvm/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Tendo33/uvm/releases/tag/v1.1.0
 [1.0.5]: https://github.com/Tendo33/uvm/releases/tag/v1.0.5

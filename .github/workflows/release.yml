@@ -9,179 +9,55 @@ permissions:
   contents: write
 
 jobs:
-  # ──────────────────────────────────────────────
-  # Job 1: 发布前全量 CI 验证（复用 CI 流程）
-  # ──────────────────────────────────────────────
-  pre-release-checks:
-    name: Pre-release Checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  quality:
+    name: Full release quality suite
+    uses: ./.github/workflows/ci.yml
 
-      - name: ShellCheck
-        uses: ludeeus/action-shellcheck@master
-        with:
-          severity: warning
-          ignore_paths: ".git .history .specify"
-          additional_files: bin/uvm
-
-      - name: Syntax Check (all scripts)
-        run: |
-          bash -n bin/uvm
-          bash -n lib/uvm-core.sh
-          bash -n lib/uvm-config.sh
-          bash -n lib/uvm-shell-hooks.sh
-          bash -n install.sh
-          bash -n uninstall.sh
-          echo "✅ Syntax OK"
-
-      - name: Security Regression
-        run: |
-          # 确认 eval echo 不再存在
-          if grep -n 'eval echo' install.sh; then
-            echo "❌ eval echo found in install.sh"
-            exit 1
-          fi
-          echo "✅ No dangerous eval usage found"
-
-      - name: Validate version consistency
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"   # e.g.  1.0.2
-          
-          # 检查 bin/uvm 中的版本号
-          SCRIPT_VERSION=$(grep 'UVM_VERSION=' bin/uvm | head -n1 | cut -d'"' -f2)
-          INSTALL_VERSION=$(grep 'UVM_INSTALL_VERSION=' install.sh | head -n1 | cut -d'"' -f2)
-          UVM_INSTALL_SKIP_MAIN=1
-          # shellcheck source=/dev/null
-          source install.sh
-          DEFAULT_DOWNLOAD_REF=$(uvm_get_download_ref)
-          echo "Tag version   : $TAG_VERSION"
-          echo "Script version: $SCRIPT_VERSION"
-          echo "Install version: $INSTALL_VERSION"
-          echo "Download ref  : $DEFAULT_DOWNLOAD_REF"
-          
-          if [ "$TAG_VERSION" != "$SCRIPT_VERSION" ]; then
-            echo "❌ Version mismatch: tag=$TAG_VERSION but bin/uvm=$SCRIPT_VERSION"
-            echo "   Please update UVM_VERSION in bin/uvm before tagging."
-            exit 1
-          fi
-          if [ "$TAG_VERSION" != "$INSTALL_VERSION" ]; then
-            echo "❌ Version mismatch: tag=$TAG_VERSION but install.sh=$INSTALL_VERSION"
-            echo "   Please update UVM_INSTALL_VERSION in install.sh before tagging."
-            exit 1
-          fi
-          if [ "v$TAG_VERSION" != "$DEFAULT_DOWNLOAD_REF" ]; then
-            echo "❌ Download ref mismatch: expected v$TAG_VERSION but install.sh defaults to $DEFAULT_DOWNLOAD_REF"
-            echo "   Please keep install.sh remote download ref aligned with the release tag."
-            exit 1
-          fi
-          echo "✅ Versions match: $TAG_VERSION"
-
-  # ──────────────────────────────────────────────
-  # Job 2: 构建发布包并创建 GitHub Release
-  # ──────────────────────────────────────────────
   release:
     name: Create GitHub Release
-    needs: pre-release-checks
+    needs: quality
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
-          fetch-depth: 0   # 拉取全部历史，用于生成 changelog
+          fetch-depth: 0
 
-      - name: Extract version
-        id: version
+      - name: Validate tag and source versions
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          SCRIPT_VERSION=$(sed -n 's/^UVM_VERSION="\([^"]*\)"/\1/p' bin/uvm)
+          INSTALL_VERSION=$(sed -n 's/^UVM_INSTALL_VERSION="\([^"]*\)"/\1/p' install.sh)
+          test "$TAG_VERSION" = "$SCRIPT_VERSION"
+          test "$TAG_VERSION" = "$INSTALL_VERSION"
+          grep -q "^## \[$TAG_VERSION\]" CHANGELOG.md
+
+      - name: Build release assets and notes
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=${GITHUB_REF_NAME}"  >> "$GITHUB_OUTPUT"
-
-      - name: Extract changelog entry
-        id: changelog
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          # 从 CHANGELOG.md 提取当前版本对应的段落
-          NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
-          if [ -z "$NOTES" ]; then
-            NOTES="请参阅 [CHANGELOG.md](CHANGELOG.md) 了解详情。"
-          fi
-          # 将多行内容安全写入 GITHUB_OUTPUT
-          {
-            echo "notes<<RELEASE_NOTES_EOF"
-            echo "$NOTES"
-            echo "RELEASE_NOTES_EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Package release assets
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          # 打包完整源码（先在 /tmp 目录下打包，避免“file changed as we read it”错误）
-          tar --exclude='.git' \
-              --exclude='.history' \
-              --exclude='.specify' \
-              --exclude='.github' \
-              -czf "/tmp/uvm-${VERSION}.tar.gz" .
-          mv "/tmp/uvm-${VERSION}.tar.gz" "./uvm-${VERSION}.tar.gz"
-
-          # 同时提供 zip 格式
+          tar --exclude='.git' --exclude='.history' --exclude='.specify' \
+            --exclude='.github' -czf "/tmp/uvm-${VERSION}.tar.gz" .
+          mv "/tmp/uvm-${VERSION}.tar.gz" "uvm-${VERSION}.tar.gz"
           zip -r "/tmp/uvm-${VERSION}.zip" . \
-              -x '.git/*' -x '.history/*' -x '.specify/*' -x '.github/*'
-          mv "/tmp/uvm-${VERSION}.zip" "./uvm-${VERSION}.zip"
+            -x '.git/*' -x '.history/*' -x '.specify/*' -x '.github/*'
+          mv "/tmp/uvm-${VERSION}.zip" "uvm-${VERSION}.zip"
+          awk "/^## \[${VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" \
+            CHANGELOG.md > release-notes.md
+          test -s release-notes.md
 
-          echo "=== Release assets ==="
-          ls -lh uvm-*.tar.gz uvm-*.zip
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "uvm ${{ steps.version.outputs.tag }}"
-          body: |
-            ## 🚀 uvm ${{ steps.version.outputs.tag }}
-
-            ${{ steps.changelog.outputs.notes }}
-
-            ---
-
-            ## 📦 安装方式
-
-            **Linux / macOS（推荐）：**
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${{ steps.version.outputs.tag }}/install.sh -o install.sh
-            bash install.sh
-            rm install.sh
-            ```
-
-            **非交互式（CI / 脚本环境）：**
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${{ steps.version.outputs.tag }}/install.sh | bash -s -- -y
-            ```
-
-            **Windows（Git Bash）：**
-            ```bash
-            # 先在 PowerShell 安装 uv（如未安装）
-            powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-            # 再在 Git Bash 中执行
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${{ steps.version.outputs.tag }}/install.sh -o install.sh
-            bash install.sh && rm install.sh
-            ```
-
-            **从已安装版本升级：**
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${{ steps.version.outputs.tag }}/install.sh | bash -s -- -y
-            source ~/.bashrc
-            ```
-
-            ---
-            > 完整更新日志请见 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
-          files: |
-            uvm-${{ steps.version.outputs.version }}.tar.gz
-            uvm-${{ steps.version.outputs.version }}.zip
-            install.sh
-            uninstall.sh
-          draft: false
-          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
-          generate_release_notes: false
-          make_latest: true
+      - name: Publish immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease_args=()
+          case "$GITHUB_REF_NAME" in
+            *-*) prerelease_args+=(--prerelease) ;;
+            *) prerelease_args+=(--latest) ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" \
+            "uvm-${GITHUB_REF_NAME#v}.tar.gz" \
+            "uvm-${GITHUB_REF_NAME#v}.zip" \
+            install.sh uninstall.sh \
+            --verify-tag \
+            --title "uvm $GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            "${prerelease_args[@]}"

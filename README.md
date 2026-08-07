@@ -12,15 +12,16 @@
 
 </div>
 
-`uvm` keeps the familiar `create / activate / deactivate / list / delete` workflow, while using `uv` for environment creation and package management. Version `1.1.1` focuses on reliability: unified config resolution, safer metadata, managed shell integration blocks, upward auto-activation lookup, and first-line diagnostics through `doctor` and `repair`.
+`uvm` keeps the familiar `create / activate / deactivate / list / delete` workflow, while delegating Python, virtual-environment, and package operations to `uv`. Version `1.2.1` hardens the 1.2 command set with trusted local activation, real `uv pip` package transfer, valid mirror configuration, stable rename semantics, and release-grade integration tests.
 
 ## Features
 
 - Conda-style commands with a small Bash footprint
 - Shared environments under `UVM_ENVS_DIR` and tracked custom `--path` environments
-- Upward auto-activation for both `.venv` and `.uvmrc`
+- Explicitly trusted upward auto-activation for local `.venv`, plus managed `.uvmrc` activation
 - Safer metadata storage under `envs.d/` instead of fragile JSON string assembly
-- Managed shell and mirror updates with stable start/end markers
+- `run`, metadata-only `rename`, `clone`, `export`, `import`, and self-update workflows
+- Managed shell and PyPI mirror updates with stable start/end markers
 - Diagnostics and recovery commands: `uvm doctor`, `uvm repair`
 - Linux, macOS, and Windows Git Bash support
 
@@ -65,7 +66,7 @@ The installer:
 - initializes `UVM_ENVS_DIR` at `~/uv_envs` unless overridden
 - registers existing managed environments in the default environment directory
 - writes managed PATH and shell-hook blocks instead of appending loose lines
-- updates the `uv` mirror configuration through a managed block
+- optionally updates the `uv` PyPI index configuration through a validated managed block
 - when `install.sh` is fetched from a tagged release, remote file downloads stay pinned to that same tag by default
 
 ### Non-interactive installation
@@ -78,7 +79,7 @@ Important:
 
 - In non-interactive mode, missing `uv` is a hard error.
 - Use this mode for CI, automation, or repeatable local setup.
-- If `UVM_HOME` is already exported, the installer reuses it instead of forcing `~/.config/uvm`.
+- Existing `UVM_HOME` and `UVM_ENVS_DIR` configuration is preserved during non-interactive reinstall/update.
 
 ### Custom managed environment directory
 
@@ -185,6 +186,41 @@ Safety rules:
 - refuses to delete unmanaged or out-of-scope paths
 - removes both the directory and the corresponding metadata record
 
+### `uvm run`, `rename`, `clone`, `export`, and `import`
+
+```bash
+uvm run myenv python -V
+uvm rename myenv renamed
+uvm clone renamed copied
+uvm export renamed > requirements.txt
+uvm import restored --from requirements.txt
+```
+
+- `run` executes in a subshell and does not modify the calling shell.
+- `rename` changes the managed name only; it does not move a non-relocatable venv.
+- `clone`, `export`, and `import` delegate package operations to `uv pip --python`, so seeded `pip` is not required.
+- failed package import/clone operations return a failure instead of reporting partial success.
+
+### `uvm trust` and `uvm untrust`
+
+```bash
+cd ~/project
+uvm trust          # review first; defaults to ./.venv
+uvm trust list
+uvm untrust
+```
+
+Local `.venv` activation scripts are executable shell code. `uvm` therefore refuses to source them automatically until their canonical path is explicitly trusted. Managed `.uvmrc` environments do not need this local-path trust step.
+
+### `uvm update`
+
+```bash
+uvm update
+uvm update v1.2.1
+```
+
+`latest` resolves through GitHub Releases, refuses version downgrade, and preserves the configured environment directory.
+
 ### `uvm scan`
 
 ```bash
@@ -200,7 +236,7 @@ Scans a directory and registers valid environments found there.
 uvm init
 ```
 
-Initializes `UVM_HOME`, ensures the default environment directory exists, configures the mirror block, and scans the default environment directory.
+Initializes `UVM_HOME`, ensures the default environment directory exists, and scans it. Mirror configuration remains opt-in.
 
 ### `uvm doctor`
 
@@ -235,7 +271,7 @@ Repairs safe, recoverable state by:
 - pruning invalid metadata records
 - rescanning the default `UVM_ENVS_DIR`
 - rewriting the managed shell-hook block
-- rewriting the managed mirror block
+- preserving any existing managed mirror block without inventing a replacement URL
 
 It does not delete valid environments automatically.
 
@@ -243,11 +279,13 @@ It does not delete valid environments automatically.
 
 ```bash
 uvm config show
-uvm config mirror
+uvm config mirror show
+uvm config mirror set https://pypi.example.com/simple
+uvm config mirror remove
 ```
 
 `config show` prints the effective config paths.  
-`config mirror` refreshes the managed mirror block in `~/.config/uv/uv.toml`.
+`config mirror set` validates and replaces the managed PyPI index block in `~/.config/uv/uv.toml`.
 If `uvm` detects unmanaged mirror sections that would conflict, it warns and leaves the file unchanged.
 
 ### `uvm shell-hook`
@@ -270,7 +308,7 @@ The shell hook no longer overrides `cd`. It uses prompt/chpwd hooks instead.
 
 Priority order:
 
-1. nearest parent `.venv`
+1. nearest explicitly trusted parent `.venv`
 2. nearest parent `.uvmrc`
 
 That means:
@@ -279,17 +317,18 @@ That means:
 - leaving the project tree deactivates auto-activated environments
 - `.venv` wins over `.uvmrc` when both exist in scope
 
-Note: `.venv` detection is intentionally broad — any directory named `.venv` that contains a valid `pyvenv.cfg` and activation script is auto-activated, regardless of whether it was created by `uvm` or by `python -m venv` / another tool.
+An untrusted `.venv` is detected but never sourced. `uvm doctor` reports the pending path; inspect it and run `uvm trust` only when you accept its activation script.
 
 ### Local `.venv`
 
 ```bash
 cd ~/project
 uv venv
+uvm trust
 cd ~/project/src/module
 ```
 
-If `~/project/.venv` exists and is valid, it is auto-activated even from `src/module`.
+After trust is granted, `~/project/.venv` is auto-activated even from `src/module`.
 
 ### Shared environment with `.uvmrc`
 
@@ -346,21 +385,18 @@ These markers make install, repair, reinstall, and uninstall idempotent.
 
 ### Managed mirror block
 
-`uvm config mirror` and `uvm repair` update only the managed block inside `~/.config/uv/uv.toml`:
+`uvm config mirror set <url>` updates only the managed PyPI index block inside `~/.config/uv/uv.toml`:
 
 ```toml
 # >>> uvm mirror >>>
 [[index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
-
-[python-downloads]
-url = "https://mirrors.tuna.tsinghua.edu.cn/python-releases/"
 # <<< uvm mirror <<<
 ```
 
 If `uv.toml` already exists, `uvm` keeps a one-time backup as `uv.toml.backup`.
-If unmanaged `[[index]]` or `[python-downloads]` sections are already present, `uvm` skips writing its managed mirror block to avoid producing an invalid or ambiguous TOML configuration.
+If an unmanaged `[[index]]` or `python-install-mirror` setting is already present, `uvm` skips writing its managed block to avoid ambiguous global configuration. Python-install mirrors are deliberately separate from PyPI package indexes and are not inferred from a package mirror URL.
 
 ## Troubleshooting
 

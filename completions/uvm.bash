@@ -17,7 +17,7 @@ _uvm_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     cmd="${COMP_WORDS[1]}"
 
-    local commands="create activate deactivate delete list scan init doctor repair config run rename clone export import update shell-hook help version"
+    local commands="create activate deactivate delete list scan init doctor repair config run rename clone export import update trust untrust shell-hook help version"
 
     if [ "${COMP_CWORD}" -eq 1 ]; then
         # shellcheck disable=SC2207
@@ -40,7 +40,7 @@ _uvm_completions() {
     case "$prev" in
         --python)
             # shellcheck disable=SC2207
-            COMPREPLY=($(compgen -W "3.8 3.9 3.10 3.11 3.12 3.13" -- "$cur"))
+            COMPREPLY=($(compgen -W "3.8 3.9 3.10 3.11 3.12 3.13 3.14" -- "$cur"))
             return 0
             ;;
         --path|--from)
@@ -70,6 +70,20 @@ _uvm_completions() {
         import)
             # shellcheck disable=SC2207
             COMPREPLY=($(compgen -W "--from" -- "$cur"))
+            ;;
+        trust)
+            if [ "${COMP_CWORD}" -eq 2 ]; then
+                # shellcheck disable=SC2207 # Bash 3.2 has no mapfile; compgen output is intentionally split.
+                COMPREPLY=($(compgen -W "list" -- "$cur"))
+                compopt -o filenames 2>/dev/null
+                # shellcheck disable=SC2207 # Bash 3.2 has no mapfile; compgen output is intentionally split.
+                COMPREPLY+=( $(compgen -d -- "$cur") )
+            fi
+            ;;
+        untrust)
+            compopt -o filenames 2>/dev/null
+            # shellcheck disable=SC2207 # Bash 3.2 has no mapfile; compgen output is intentionally split.
+            COMPREPLY=($(compgen -d -- "$cur"))
             ;;
         config)
             if [ "${COMP_CWORD}" -eq 2 ]; then

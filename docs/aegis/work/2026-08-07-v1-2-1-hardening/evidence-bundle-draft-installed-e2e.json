@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "installed-e2e",
+  "type": "integration",
+  "source": "isolated HOME local install smoke test",
+  "summary": "Install with spaced env root plus create, activate, export, rename, JSON parse, delete, trust, untrust, and doctor passed.",
+  "verifier": "Codex"
+}

@@ -100,21 +100,25 @@ uvm_detect_auto_activation_target() {
     local env_name
     local env_path
 
-    unset UVM_AUTO_TARGET_PATH UVM_AUTO_TARGET_SOURCE UVM_AUTO_TARGET_ROOT
+    unset UVM_AUTO_TARGET_PATH UVM_AUTO_TARGET_SOURCE UVM_AUTO_TARGET_ROOT UVM_UNTRUSTED_LOCAL_ENV
     uvm_shell_load_runtime_config
 
     local_env=$(uvm_find_upward_local_env || true)
     if [ -n "$local_env" ]; then
-        UVM_AUTO_TARGET_PATH="$local_env"
-        UVM_AUTO_TARGET_SOURCE="local"
-        UVM_AUTO_TARGET_ROOT="$(dirname "$local_env")"
-        export UVM_AUTO_TARGET_PATH UVM_AUTO_TARGET_SOURCE UVM_AUTO_TARGET_ROOT
-        return 0
+        if uvm_is_local_env_trusted "$local_env"; then
+            UVM_AUTO_TARGET_PATH="$local_env"
+            UVM_AUTO_TARGET_SOURCE="local"
+            UVM_AUTO_TARGET_ROOT="$(dirname "$UVM_AUTO_TARGET_PATH")"
+            export UVM_AUTO_TARGET_PATH UVM_AUTO_TARGET_SOURCE UVM_AUTO_TARGET_ROOT
+            return 0
+        fi
+        UVM_UNTRUSTED_LOCAL_ENV=$(uvm_resolve_existing_path "$local_env" || printf '%s' "$local_env")
+        export UVM_UNTRUSTED_LOCAL_ENV
     fi
 
     uvmrc_file=$(uvm_find_upward_file ".uvmrc" || true)
     if [ -n "$uvmrc_file" ]; then
-        env_name=$(tr -d '[:space:]' < "$uvmrc_file" | head -n 1)
+        env_name=$(head -n 1 "$uvmrc_file" | tr -d '[:space:]')
         if ! uvm_is_valid_env_name "$env_name"; then
             echo "Warning: Invalid environment name in ${uvmrc_file}" >&2
             return 0
@@ -133,6 +137,7 @@ uvm_detect_auto_activation_target() {
 }
 
 uvm_auto_activate() {
+    local previous_status=$?
     local activate_script
 
     uvm_detect_auto_activation_target
@@ -143,14 +148,14 @@ uvm_auto_activate() {
                 deactivate >/dev/null 2>&1 || true
             fi
 
-            activate_script=$(uvm_env_activate_script "$UVM_AUTO_TARGET_PATH") || return 0
+            activate_script=$(uvm_env_activate_script "$UVM_AUTO_TARGET_PATH") || return "$previous_status"
             # shellcheck source=/dev/null
-            source "$activate_script"
+            source "$activate_script" || return "$previous_status"
             export UVM_AUTO_ACTIVATED="${UVM_AUTO_TARGET_SOURCE}"
             export UVM_AUTO_ACTIVATED_PATH="$UVM_AUTO_TARGET_PATH"
             export UVM_AUTO_PROJECT_ROOT="$UVM_AUTO_TARGET_ROOT"
         fi
-        return 0
+        return "$previous_status"
     fi
 
     if [ -n "${UVM_AUTO_ACTIVATED:-}" ] && [ -n "${VIRTUAL_ENV:-}" ]; then
@@ -161,6 +166,8 @@ uvm_auto_activate() {
         unset UVM_AUTO_ACTIVATED_PATH
         unset UVM_AUTO_PROJECT_ROOT
     fi
+
+    return "$previous_status"
 }
 
 uvm_shell_activate() {
@@ -221,10 +228,19 @@ uvm_setup_prompt_hook() {
     fi
 
     if [ -n "${BASH_VERSION:-}" ]; then
+        if declare -p PROMPT_COMMAND 2>/dev/null | grep -q 'declare -a'; then
+            local hook
+            for hook in "${PROMPT_COMMAND[@]}"; do
+                [ "$hook" = "uvm_auto_activate" ] && return 0
+            done
+            PROMPT_COMMAND=("uvm_auto_activate" "${PROMPT_COMMAND[@]}")
+            return 0
+        fi
         case ";${PROMPT_COMMAND:-};" in
             *";uvm_auto_activate;"*)
                 ;;
             *)
+                # shellcheck disable=SC2128,SC2178 # This branch is only for scalar PROMPT_COMMAND.
                 PROMPT_COMMAND="uvm_auto_activate${PROMPT_COMMAND:+;${PROMPT_COMMAND}}"
                 ;;
         esac
@@ -238,9 +254,13 @@ $(declare -f uvm_get_home)
 $(declare -f uvm_get_config_file)
 $(declare -f uvm_get_default_envs_dir)
 $(declare -f uvm_get_env_records_dir)
+$(declare -f uvm_get_trusted_envs_file)
+$(declare -f uvm_resolve_dir_path)
+$(declare -f uvm_resolve_existing_path)
 $(declare -f uvm_is_valid_env_name)
 $(declare -f uvm_env_activate_script)
 $(declare -f uvm_is_valid_uv_env)
+$(declare -f uvm_is_local_env_trusted)
 $(declare -f uvm_shell_load_runtime_config)
 $(declare -f _uvm_hook_record_file_path)
 $(declare -f _uvm_hook_get_env_path)

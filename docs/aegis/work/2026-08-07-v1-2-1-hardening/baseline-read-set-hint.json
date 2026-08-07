@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "README.md",
+    "project_document/main.md",
+    "CHANGELOG.md"
+  ],
+  "whyRelevant": "Current product contract, implementation description, and release history.",
+  "missingAuthority": []
+}

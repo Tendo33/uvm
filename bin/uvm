@@ -5,12 +5,15 @@ LIB_DIR="$(cd "${SCRIPT_DIR}/../lib" && pwd)"
 
 export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
 
+# shellcheck source=lib/uvm-config.sh
 source "${LIB_DIR}/uvm-config.sh" || { echo "Error: Failed to load uvm-config.sh from ${LIB_DIR}" >&2; exit 1; }
 uvm_load_user_config
+# shellcheck source=lib/uvm-core.sh
 source "${LIB_DIR}/uvm-core.sh" || { echo "Error: Failed to load uvm-core.sh from ${LIB_DIR}" >&2; exit 1; }
+# shellcheck source=lib/uvm-shell-hooks.sh
 source "${LIB_DIR}/uvm-shell-hooks.sh" || { echo "Error: Failed to load uvm-shell-hooks.sh from ${LIB_DIR}" >&2; exit 1; }
 
-UVM_VERSION="1.2.0"
+UVM_VERSION="1.2.1"
 
 show_version() {
     echo "uvm version ${UVM_VERSION}"
@@ -60,6 +63,32 @@ main() {
         update)
             uvm_self_update "$@"
             ;;
+        trust)
+            if [ "${1:-}" = "list" ] || [ "${1:-}" = "--list" ]; then
+                if [ $# -ne 1 ]; then
+                    echo "Usage: uvm trust [path] | uvm trust list"
+                    return 1
+                fi
+                uvm_list_trusted_local_envs
+                return 0
+            fi
+            local trust_path="${1:-${PWD}/.venv}"
+            if [ $# -gt 1 ]; then
+                echo "Usage: uvm trust [path] | uvm trust list"
+                return 1
+            fi
+            trust_path=$(uvm_trust_local_env "$trust_path") || return 1
+            echo "Trusted local environment: ${trust_path}"
+            ;;
+        untrust)
+            local untrust_path="${1:-${PWD}/.venv}"
+            if [ $# -gt 1 ]; then
+                echo "Usage: uvm untrust [path]"
+                return 1
+            fi
+            uvm_untrust_local_env "$untrust_path" || return 1
+            echo "Local environment is no longer trusted: ${untrust_path}"
+            ;;
         list|ls)
             uvm_list "$@"
             ;;
@@ -99,7 +128,7 @@ main() {
                     case "$mirror_action" in
                         set)
                             local mirror_url="${1:-}"
-                            if [ -z "$mirror_url" ]; then
+                            if [ -z "$mirror_url" ] || [ $# -ne 1 ]; then
                                 echo "Usage: uvm config mirror set <url>"
                                 echo "Example: uvm config mirror set https://pypi.tuna.tsinghua.edu.cn/simple"
                                 return 1
@@ -108,6 +137,10 @@ main() {
                             echo "Mirror set to: ${mirror_url}"
                             ;;
                         remove)
+                            if [ $# -ne 0 ]; then
+                                echo "Usage: uvm config mirror remove"
+                                return 1
+                            fi
                             uvm_remove_managed_block \
                                 "$(uvm_get_uv_config_file)" \
                                 "$(uvm_get_mirror_start_marker)" \
@@ -115,6 +148,10 @@ main() {
                             echo "Mirror configuration removed from $(uvm_get_uv_config_file)"
                             ;;
                         show)
+                            if [ $# -ne 0 ]; then
+                                echo "Usage: uvm config mirror show"
+                                return 1
+                            fi
                             if uvm_file_contains_managed_block \
                                 "$(uvm_get_uv_config_file)" \
                                 "$(uvm_get_mirror_start_marker)" \

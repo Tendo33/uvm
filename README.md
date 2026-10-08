@@ -12,7 +12,7 @@
 
 </div>
 
-`uvm` keeps the familiar `create / activate / deactivate / list / delete` workflow, while delegating Python, virtual-environment, and package operations to `uv`. Version `1.2.1` hardens the 1.2 command set with trusted local activation, real `uv pip` package transfer, valid mirror configuration, stable rename semantics, and release-grade integration tests.
+`uvm` keeps the familiar `create / activate / deactivate / list / delete` workflow, while delegating Python, virtual-environment, and package operations to `uv`. Version `1.2.2` writes mirror configuration where uv actually reads it (including `XDG_CONFIG_HOME` and Windows `%APPDATA%`) and keeps CI tracking the latest uv release, on top of the 1.2.1 hardening: trusted local activation, real `uv pip` package transfer, valid mirror configuration, stable rename semantics, and release-grade integration tests.
 
 ## Features
 
@@ -216,7 +216,7 @@ Local `.venv` activation scripts are executable shell code. `uvm` therefore refu
 
 ```bash
 uvm update
-uvm update v1.2.1
+uvm update v1.2.2
 ```
 
 `latest` resolves through GitHub Releases, refuses version downgrade, and preserves the configured environment directory.

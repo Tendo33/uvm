@@ -148,13 +148,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Validate 1.2.1 declarations and retired paths
+      - name: Validate 1.2.2 declarations and retired paths
         run: |
-          grep -q 'UVM_VERSION="1.2.1"' bin/uvm
-          grep -q 'UVM_INSTALL_VERSION="1.2.1"' install.sh
-          grep -q '^## \[1.2.1\]' CHANGELOG.md
-          grep -q '1.2.1' README.md
-          grep -q '1.2.1' README_CN.md
+          grep -q 'UVM_VERSION="1.2.2"' bin/uvm
+          grep -q 'UVM_INSTALL_VERSION="1.2.2"' install.sh
+          grep -q '^## \[1.2.2\]' CHANGELOG.md
+          grep -q '1.2.2' README.md
+          grep -q '1.2.2' README_CN.md
           if grep -R -n '\[python-downloads\]' \
               README.md README_CN.md EXAMPLES.md project_document templates lib; then
             echo "Retired invalid [python-downloads] table is still documented or emitted"

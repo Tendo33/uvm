@@ -12,7 +12,7 @@
 
 </div>
 
-`uvm` 保留熟悉的 `create / activate / deactivate / list / delete` 工作流，同时把 Python、虚拟环境和包操作交给 `uv`。`1.2.1` 对 1.2 命令集做发布加固：本地环境显式信任、真实 `uv pip` 包迁移、合法镜像配置、稳定 rename 语义，以及真实环境集成测试。
+`uvm` 保留熟悉的 `create / activate / deactivate / list / delete` 工作流，同时把 Python、虚拟环境和包操作交给 `uv`。`1.2.2` 让镜像配置写到 uv 实际读取的位置（支持 `XDG_CONFIG_HOME` 与 Windows `%APPDATA%`），并让 CI 持续跟进最新版 uv；同时保留 1.2.1 的发布加固：本地环境显式信任、真实 `uv pip` 包迁移、合法镜像配置、稳定 rename 语义，以及真实环境集成测试。
 
 ## 功能概览
 
@@ -213,7 +213,7 @@ uvm untrust
 
 ### `uvm update`
 
-`uvm update` 从 GitHub Latest Release 更新，拒绝降级并保留当前环境目录；也可显式传入 `v1.2.1` 这样的 tag。
+`uvm update` 从 GitHub Latest Release 更新，拒绝降级并保留当前环境目录；也可显式传入 `v1.2.2` 这样的 tag。
 
 ### `uvm scan`
 

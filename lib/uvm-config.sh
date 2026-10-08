@@ -12,6 +12,65 @@ uvm_get_config_file() {
     echo "$(uvm_get_home)/config"
 }
 
+# Reads KEY from the uvm config file without executing it. Accepts the current
+# KEY="value" format and the printf %q output written by uvm <= 1.2.2.
+uvm_read_config_value() {
+    local key="$1"
+    local config_file="${2:-$(uvm_get_config_file)}"
+    local line
+    local value=""
+    local found=1
+
+    [ -f "$config_file" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        case "$line" in
+            "${key}="*)
+                value="${line#*=}"
+                found=0
+                ;;
+        esac
+    done < "$config_file"
+    [ "$found" -eq 0 ] || return 1
+
+    case "$value" in
+        \"*\")
+            value="${value#\"}"
+            value="${value%\"}"
+            ;;
+        \'*\')
+            value="${value#\'}"
+            value="${value%\'}"
+            ;;
+        *\\*)
+            value=$(printf '%s\n' "$value" | sed 's/\\\(.\)/\1/g')
+            ;;
+    esac
+    printf '%s\n' "$value"
+}
+
+# Sets KEY in the uvm config file, keeping every other line intact.
+uvm_write_config_value() {
+    local key="$1"
+    local value="$2"
+    local config_file
+    local temp_file
+
+    if uvm_value_has_line_break "$value" || [[ "$value" == *'"'* ]]; then
+        echo "Error: Config values cannot contain line breaks or double quotes" >&2
+        return 1
+    fi
+
+    config_file=$(uvm_get_config_file)
+    mkdir -p "$(dirname "$config_file")" || return 1
+    temp_file=$(mktemp "${config_file}.XXXXXX") || return 1
+    if [ -f "$config_file" ]; then
+        grep -v "^${key}=" "$config_file" > "$temp_file" || true
+    fi
+    printf '%s="%s"\n' "$key" "$value" >> "$temp_file"
+    mv "$temp_file" "$config_file"
+}
+
 uvm_get_env_records_dir() {
     echo "$(uvm_get_home)/envs.d"
 }
@@ -329,11 +388,12 @@ get_env_python_version() {
 }
 
 uvm_load_user_config() {
+    local configured_envs_dir
+
     export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
 
-    if [ -f "$(uvm_get_config_file)" ]; then
-        # shellcheck source=/dev/null
-        source "$(uvm_get_config_file)"
+    if configured_envs_dir=$(uvm_read_config_value UVM_ENVS_DIR); then
+        UVM_ENVS_DIR="$configured_envs_dir"
     fi
 
     export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
@@ -549,7 +609,7 @@ init_uvm_config() {
     mkdir -p "$uvm_home" "$(uvm_get_env_records_dir)" "$(uvm_get_lock_root)"
 
     if [ ! -f "$config_file" ]; then
-        printf 'UVM_ENVS_DIR=%q\n' "$(uvm_get_default_envs_dir)" > "$config_file"
+        uvm_write_config_value UVM_ENVS_DIR "$(uvm_get_default_envs_dir)" || return 1
     fi
 
     uvm_migrate_legacy_envs_file
@@ -725,39 +785,79 @@ uvm_ensure_shell_hook_configured() {
         "$(uvm_generate_shell_hook_block)"
 }
 
-uvm_file_has_unmanaged_mirror_config() {
-    local file_path="$1"
-    local temp_file
-
-    [ -f "$file_path" ] || return 1
-
-    temp_file=$(mktemp "${TMPDIR:-/tmp}/uvm-mirror-check.XXXXXX") || return 1
-    awk -v start="$(uvm_get_mirror_start_marker)" -v end="$(uvm_get_mirror_end_marker)" '
-        $0 == start { skip = 1; next }
-        $0 == end { skip = 0; next }
-        skip != 1 { print }
-    ' "$file_path" > "$temp_file"
-
-    if grep -Eq '^[[:space:]]*\[\[index\]\][[:space:]]*$|^[[:space:]]*python-install-mirror[[:space:]]*=' "$temp_file"; then
-        rm -f "$temp_file"
-        return 0
-    fi
-
-    rm -f "$temp_file"
-    return 1
+uvm_get_python_mirror_start_marker() {
+    echo "# >>> uvm python-mirror >>>"
 }
 
-setup_uv_mirror() {
-    local mirror_url="${1:-}"
-    local uv_config_dir
-    local uv_config_file
-    local mirror_block
-    local validation_file
+uvm_get_python_mirror_end_marker() {
+    echo "# <<< uvm python-mirror <<<"
+}
 
-    # No URL provided: nothing to do (opt-in only)
-    if [ -z "$mirror_url" ]; then
-        return 0
+# Prints the file with every uvm-managed uv.toml block removed.
+uvm_strip_managed_uv_blocks() {
+    awk \
+        -v pypi_start="$(uvm_get_mirror_start_marker)" -v pypi_end="$(uvm_get_mirror_end_marker)" \
+        -v python_start="$(uvm_get_python_mirror_start_marker)" -v python_end="$(uvm_get_python_mirror_end_marker)" '
+        $0 == pypi_start || $0 == python_start { skip = 1; next }
+        $0 == pypi_end || $0 == python_end { skip = 0; next }
+        skip != 1 { print }
+    ' "$1"
+}
+
+# kind: "pypi" checks for an unmanaged [[index]] table, "python" for an
+# unmanaged python-install-mirror key.
+uvm_file_has_unmanaged_mirror_config() {
+    local file_path="$1"
+    local kind="${2:-pypi}"
+    local pattern='^[[:space:]]*\[\[index\]\][[:space:]]*$'
+
+    [ -f "$file_path" ] || return 1
+    if [ "$kind" = "python" ]; then
+        pattern='^[[:space:]]*python-install-mirror[[:space:]]*='
     fi
+    uvm_strip_managed_uv_blocks "$file_path" | grep -Eq "$pattern"
+}
+
+# Prints the quoted value of KEY inside a managed block.
+uvm_read_managed_block_value() {
+    local file_path="$1"
+    local start_marker="$2"
+    local end_marker="$3"
+    local key="$4"
+
+    [ -f "$file_path" ] || return 1
+    awk -v start="$start_marker" -v end="$end_marker" -v key="$key" '
+        $0 == start { inside = 1; next }
+        $0 == end { inside = 0; next }
+        inside && $0 ~ ("^[[:space:]]*" key "[[:space:]]*=") {
+            sub(/^[^=]*=[[:space:]]*"/, "")
+            sub(/".*$/, "")
+            print
+            found = 1
+            exit
+        }
+        END { exit found ? 0 : 1 }
+    ' "$file_path"
+}
+
+uvm_get_pypi_mirror_url() {
+    uvm_read_managed_block_value \
+        "$(uvm_get_uv_config_file)" \
+        "$(uvm_get_mirror_start_marker)" \
+        "$(uvm_get_mirror_end_marker)" \
+        "url"
+}
+
+uvm_get_python_mirror_url() {
+    uvm_read_managed_block_value \
+        "$(uvm_get_uv_config_file)" \
+        "$(uvm_get_python_mirror_start_marker)" \
+        "$(uvm_get_python_mirror_end_marker)" \
+        "python-install-mirror"
+}
+
+uvm_validate_mirror_url() {
+    local mirror_url="$1"
 
     case "$mirror_url" in
         https://*|http://*|file://*) ;;
@@ -770,18 +870,48 @@ setup_uv_mirror() {
         echo "Error: Mirror URL contains unsupported characters" >&2
         return 1
     fi
+}
 
-    uv_config_dir=$(uvm_get_uv_config_dir)
-    uv_config_file=$(uvm_get_uv_config_file)
+# Rejects a uv.toml fragment that uv itself cannot parse. Skipped when uv is absent.
+uvm_validate_uv_config_fragment() {
+    local fragment="$1"
+    local validation_file
 
-    mkdir -p "$uv_config_dir" || return 1
-    if uvm_file_has_unmanaged_mirror_config "$uv_config_file"; then
-        echo "Error: Existing unmanaged mirror config conflict detected in ${uv_config_file}; leaving file unchanged" >&2
+    command -v uv >/dev/null 2>&1 || return 0
+    validation_file=$(mktemp "${TMPDIR:-/tmp}/uvm-config-check.XXXXXX.toml") || return 1
+    printf '%s\n' "$fragment" > "$validation_file"
+    if ! uv --config-file "$validation_file" python list --only-installed >/dev/null 2>&1; then
+        rm -f "$validation_file"
+        echo "Error: Generated mirror configuration was rejected by uv" >&2
         return 1
     fi
+    rm -f "$validation_file"
+}
+
+uvm_backup_uv_config_once() {
+    local uv_config_file="$1"
 
     if [ -f "$uv_config_file" ] && [ ! -f "${uv_config_file}.backup" ]; then
         cp "$uv_config_file" "${uv_config_file}.backup"
+    fi
+}
+
+setup_uv_mirror() {
+    local mirror_url="${1:-}"
+    local uv_config_file
+    local mirror_block
+
+    # No URL provided: nothing to do (opt-in only)
+    if [ -z "$mirror_url" ]; then
+        return 0
+    fi
+    uvm_validate_mirror_url "$mirror_url" || return 1
+
+    uv_config_file=$(uvm_get_uv_config_file)
+    mkdir -p "$(uvm_get_uv_config_dir)" || return 1
+    if uvm_file_has_unmanaged_mirror_config "$uv_config_file" pypi; then
+        echo "Error: Existing unmanaged [[index]] config conflict detected in ${uv_config_file}; leaving file unchanged" >&2
+        return 1
     fi
 
     mirror_block=$(cat <<EOF
@@ -790,17 +920,8 @@ url = "${mirror_url}"
 default = true
 EOF
 )
-
-    if command -v uv >/dev/null 2>&1; then
-        validation_file=$(mktemp "${TMPDIR:-/tmp}/uvm-config-check.XXXXXX.toml") || return 1
-        printf '%s\n' "$mirror_block" > "$validation_file"
-        if ! uv --config-file "$validation_file" python list --only-installed >/dev/null 2>&1; then
-            rm -f "$validation_file"
-            echo "Error: Generated mirror configuration was rejected by uv" >&2
-            return 1
-        fi
-        rm -f "$validation_file"
-    fi
+    uvm_validate_uv_config_fragment "$mirror_block" || return 1
+    uvm_backup_uv_config_once "$uv_config_file"
 
     uvm_upsert_managed_block \
         "$uv_config_file" \
@@ -809,6 +930,45 @@ EOF
         "$mirror_block" || return 1
 
     uvm_remove_stale_mirror_config
+}
+
+# python-install-mirror is a top-level key, so its block has to precede every
+# TOML table in the file; it is always written at the top.
+setup_uv_python_mirror() {
+    local mirror_url="$1"
+    local uv_config_file
+    local mirror_block
+    local start_marker
+    local end_marker
+    local temp_file
+
+    uvm_validate_mirror_url "$mirror_url" || return 1
+
+    uv_config_file=$(uvm_get_uv_config_file)
+    mkdir -p "$(uvm_get_uv_config_dir)" || return 1
+    if uvm_file_has_unmanaged_mirror_config "$uv_config_file" python; then
+        echo "Error: Existing unmanaged python-install-mirror detected in ${uv_config_file}; leaving file unchanged" >&2
+        return 1
+    fi
+
+    mirror_block="python-install-mirror = \"${mirror_url}\""
+    uvm_validate_uv_config_fragment "$mirror_block" || return 1
+    uvm_backup_uv_config_once "$uv_config_file"
+
+    start_marker=$(uvm_get_python_mirror_start_marker)
+    end_marker=$(uvm_get_python_mirror_end_marker)
+    temp_file=$(mktemp "${TMPDIR:-/tmp}/uvm-block.XXXXXX") || return 1
+    {
+        printf '%s\n%s\n%s\n' "$start_marker" "$mirror_block" "$end_marker"
+        if [ -f "$uv_config_file" ]; then
+            awk -v start="$start_marker" -v end="$end_marker" '
+                $0 == start { skip = 1; next }
+                $0 == end { skip = 0; next }
+                skip != 1 { print }
+            ' "$uv_config_file"
+        fi
+    } > "$temp_file"
+    mv "$temp_file" "$uv_config_file"
 }
 
 uvm_trust_local_env() {

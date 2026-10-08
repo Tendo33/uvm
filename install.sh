@@ -104,7 +104,7 @@ download_uvm_files() {
     local file_path
 
     base_url="$(uvm_get_download_base_url)"
-    mkdir -p "$dest/bin" "$dest/lib" "$dest/templates" "$dest/completions"
+    mkdir -p "$dest/bin" "$dest/lib" "$dest/completions"
 
     for file_path in \
         bin/uvm \
@@ -112,8 +112,7 @@ download_uvm_files() {
         lib/uvm-core.sh \
         lib/uvm-shell-hooks.sh \
         completions/uvm.bash \
-        completions/_uvm \
-        templates/uv.toml.template
+        completions/_uvm
     do
         local url="${base_url}/${file_path}"
         local output="${dest}/${file_path}"
@@ -138,18 +137,33 @@ install_uvm() {
 
     uvm_home="$(uvm_get_effective_home)"
     print_info "Installing uvm files..."
-    mkdir -p "$install_dir" "$uvm_lib_dir" "${uvm_home}/templates"
+    mkdir -p "$install_dir" "$uvm_lib_dir"
 
-    cp "${source_dir}/bin/uvm" "${install_dir}/uvm"
-    chmod +x "${install_dir}/uvm"
-    cp -r "${source_dir}/lib/." "$uvm_lib_dir/"
-    cp -r "${source_dir}/templates/." "${uvm_home}/templates/"
+    # `uvm update` runs this installer from inside the running bin/uvm. Overwriting
+    # that file in place makes bash resume reading the new content at a stale offset,
+    # so every file is staged next to its target and swapped in with an atomic mv.
+    local staged_bin
+    staged_bin=$(mktemp "${install_dir}/.uvm.XXXXXX") || return 1
+    sed -e "s|SCRIPT_DIR=\".*\"|SCRIPT_DIR=\"${uvm_lib_dir}\"|" \
+        -e "s|LIB_DIR=\".*\"|LIB_DIR=\"${uvm_lib_dir}\"|" \
+        "${source_dir}/bin/uvm" > "$staged_bin" || { rm -f "$staged_bin"; return 1; }
+    chmod 755 "$staged_bin"
+    mv -f "$staged_bin" "${install_dir}/uvm" || { rm -f "$staged_bin"; return 1; }
 
-    sed -i.bak "s|SCRIPT_DIR=\".*\"|SCRIPT_DIR=\"${uvm_lib_dir}\"|g" "${install_dir}/uvm" 2>/dev/null || \
-        sed -i '' "s|SCRIPT_DIR=\".*\"|SCRIPT_DIR=\"${uvm_lib_dir}\"|g" "${install_dir}/uvm" 2>/dev/null || true
-    sed -i.bak "s|LIB_DIR=\".*\"|LIB_DIR=\"${uvm_lib_dir}\"|g" "${install_dir}/uvm" 2>/dev/null || \
-        sed -i '' "s|LIB_DIR=\".*\"|LIB_DIR=\"${uvm_lib_dir}\"|g" "${install_dir}/uvm" 2>/dev/null || true
-    rm -f "${install_dir}/uvm.bak"
+    local lib_file
+    local staged_lib
+    for lib_file in "${source_dir}"/lib/*.sh; do
+        staged_lib=$(mktemp "${uvm_lib_dir}/.$(basename "$lib_file").XXXXXX") || return 1
+        if ! { cp "$lib_file" "$staged_lib" && chmod 644 "$staged_lib" &&
+            mv -f "$staged_lib" "${uvm_lib_dir}/$(basename "$lib_file")"; }; then
+            rm -f "$staged_lib"
+            return 1
+        fi
+    done
+
+    # uvm <= 1.2.2 copied an unused uv.toml template here.
+    rm -f "${uvm_home}/templates/uv.toml.template"
+    rmdir "${uvm_home}/templates" 2>/dev/null || true
 
     print_success "Installed binary to ${install_dir}/uvm"
     print_success "Installed library to ${uvm_lib_dir}"
@@ -248,8 +262,8 @@ initialize_config() {
     UVM_HOME="$(uvm_get_effective_home)"
     export UVM_ENVS_DIR="$envs_dir"
 
-    init_uvm_config
-    printf 'UVM_ENVS_DIR=%q\n' "$envs_dir" > "$(uvm_get_config_file)"
+    init_uvm_config || return 1
+    uvm_write_config_value UVM_ENVS_DIR "$envs_dir" || return 1
     registered_count=$(scan_and_register_envs "$envs_dir")
 
     if [ -n "$mirror_url" ]; then
@@ -287,9 +301,11 @@ show_post_install() {
 }
 
 interactive_setup() {
+    local source_dir="${1:-}"
     local choice
 
-    UVM_SETUP_ENVS_DIR="${HOME}/uv_envs"
+    # Reinstalls offer the currently configured directory instead of the default.
+    UVM_SETUP_ENVS_DIR="$(resolve_existing_envs_dir ${source_dir:+"$source_dir"})"
     UVM_SETUP_INSTALL_UV="n"
     UVM_SETUP_AUTO_ACTIVATION="y"
     UVM_SETUP_MIRROR_URL=""
@@ -322,22 +338,21 @@ interactive_setup() {
 }
 
 resolve_existing_envs_dir() {
-    local config_file="${UVM_HOME:-${HOME}/.config/uvm}/config"
+    local source_dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
     if [ -n "${UVM_ENVS_DIR:-}" ]; then
         printf '%s\n' "$UVM_ENVS_DIR"
         return 0
     fi
-    if [ -f "$config_file" ]; then
-        (
-            unset UVM_ENVS_DIR
-            # shellcheck source=/dev/null
-            source "$config_file"
-            printf '%s\n' "${UVM_ENVS_DIR:-${HOME}/uv_envs}"
-        )
-        return 0
-    fi
-    printf '%s\n' "${HOME}/uv_envs"
+    (
+        # shellcheck source=lib/uvm-config.sh
+        source "${source_dir}/lib/uvm-config.sh" 2>/dev/null || {
+            printf '%s\n' "${HOME}/uv_envs"
+            exit 0
+        }
+        UVM_HOME="$(uvm_get_effective_home)"
+        uvm_read_config_value UVM_ENVS_DIR || printf '%s\n' "${HOME}/uv_envs"
+    )
 }
 
 main() {
@@ -348,6 +363,7 @@ main() {
     local non_interactive=false
     local install_uv_choice="n"
     local enable_auto_activation="y"
+    local skip_shell_hook=false
 
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
@@ -385,6 +401,10 @@ main() {
                 custom_mirror_url=""
                 shift
                 ;;
+            --no-shell-hook)
+                skip_shell_hook=true
+                shift
+                ;;
             -y|--non-interactive)
                 non_interactive=true
                 shift
@@ -398,6 +418,7 @@ Usage: ./install.sh [OPTIONS]
   --envs-dir <path>    Custom directory for virtual environments
   --mirror <url>       Configure a PyPI mirror (e.g. https://pypi.tuna.tsinghua.edu.cn/simple)
   --no-mirror          Skip mirror configuration (default in non-interactive mode)
+  --no-shell-hook      Do not add the auto-activation shell hook
   -y, --non-interactive
                        Use defaults and fail if UV is missing
   -h, --help           Show this help message
@@ -414,14 +435,17 @@ EOF
     print_info "Detected OS: $(detect_os)"
 
     if [ "$non_interactive" = false ] && [ -z "$custom_envs_dir" ]; then
-        interactive_setup
+        interactive_setup "$script_dir"
         custom_envs_dir="$UVM_SETUP_ENVS_DIR"
         install_uv_choice="$UVM_SETUP_INSTALL_UV"
         enable_auto_activation="$UVM_SETUP_AUTO_ACTIVATION"
         custom_mirror_url="$UVM_SETUP_MIRROR_URL"
     else
-        custom_envs_dir="${custom_envs_dir:-$(resolve_existing_envs_dir)}"
+        custom_envs_dir="${custom_envs_dir:-$(resolve_existing_envs_dir "$script_dir")}"
         print_info "Running in non-interactive mode"
+    fi
+    if [ "$skip_shell_hook" = true ]; then
+        enable_auto_activation="n"
     fi
 
     if [[ "$install_uv_choice" =~ ^[Yy]$ ]]; then

@@ -88,11 +88,27 @@ _uvm_completions() {
         config)
             if [ "${COMP_CWORD}" -eq 2 ]; then
                 # shellcheck disable=SC2207
-                COMPREPLY=($(compgen -W "show mirror" -- "$cur"))
-            elif [ "${COMP_CWORD}" -eq 3 ] && [ "${COMP_WORDS[2]}" = "mirror" ]; then
+                COMPREPLY=($(compgen -W "show get set mirror python-mirror" -- "$cur"))
+            elif [ "${COMP_CWORD}" -eq 3 ]; then
+                case "${COMP_WORDS[2]}" in
+                    mirror|python-mirror)
+                        # shellcheck disable=SC2207
+                        COMPREPLY=($(compgen -W "set remove show" -- "$cur"))
+                        ;;
+                    get|set)
+                        # shellcheck disable=SC2207
+                        COMPREPLY=($(compgen -W "envs-dir" -- "$cur"))
+                        ;;
+                esac
+            elif [ "${COMP_CWORD}" -eq 4 ] && [ "${COMP_WORDS[2]}" = "set" ]; then
+                compopt -o filenames 2>/dev/null
                 # shellcheck disable=SC2207
-                COMPREPLY=($(compgen -W "set remove show" -- "$cur"))
+                COMPREPLY=($(compgen -d -- "$cur"))
             fi
+            ;;
+        update)
+            # shellcheck disable=SC2207
+            COMPREPLY=($(compgen -W "--check" -- "$cur"))
             ;;
         run)
             if [ "${COMP_CWORD}" -eq 2 ]; then

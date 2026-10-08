@@ -67,7 +67,7 @@ rm install.sh
 - 扫描默认环境目录并注册已有环境
 - 通过受管 block 写入 PATH 与 shell hook，而不是粗暴追加零散行
 - 可选地通过验证后的受管 block 更新 `uv` PyPI 包索引
-- 如果 `install.sh` 来自某个 release tag，远程下载的 `bin/`、`lib/`、`templates/` 默认也会固定到同一个 tag
+- 如果 `install.sh` 来自某个 release tag，远程下载的 `bin/`、`lib/`、`completions/` 默认也会固定到同一个 tag
 
 ### 非交互安装
 
@@ -91,7 +91,7 @@ bash install.sh --envs-dir /path/to/envs
 
 ### 高级用法：覆盖远程下载 ref
 
-当你下载的是某个 release 对应的 `install.sh` 时，安装器默认会从匹配的 `v<version>` ref 下载 `bin/`、`lib/` 和 `templates/`。
+当你下载的是某个 release 对应的 `install.sh` 时，安装器默认会从匹配的 `v<version>` ref 下载 `bin/`、`lib/` 和 `completions/`。
 
 如果你明确想安装别的 ref，可以显式覆盖：
 
@@ -213,7 +213,13 @@ uvm untrust
 
 ### `uvm update`
 
-`uvm update` 从 GitHub Latest Release 更新，拒绝降级并保留当前环境目录；也可显式传入 `v1.2.2` 这样的 tag。
+```bash
+uvm update            # 更新到最新 release
+uvm update --check    # 只查看当前版本和最新版本，不安装
+uvm update v1.2.2     # 指定版本；也可用来重装当前版本
+```
+
+`uvm update` 从 GitHub Latest Release 更新，拒绝降级并保留当前环境目录。已经是最新版时只会提示，不会重装。安装时没开自动激活的，更新后依然保持关闭。更新完成后请重开终端（`exec "$SHELL"`），让当前会话加载新版本。
 
 从 1.2.0 之前的版本升级（`uvm version` 显示 1.0.x 或 1.1.x，执行 `uvm update` 提示 `Unknown command`）：需要先手动重装一次，之后就可以直接用 `uvm update`。已有环境和环境目录配置都会保留。
 
@@ -283,15 +289,21 @@ uvm repair
 ### `uvm config`
 
 ```bash
-uvm config show
+uvm config show                          # 查看全部生效配置，包括两种镜像
+uvm config get envs-dir
+uvm config set envs-dir ~/my-envs        # 新环境的存放目录
+uvm config mirror set https://pypi.tuna.tsinghua.edu.cn/simple
 uvm config mirror show
-uvm config mirror set https://pypi.example.com/simple
 uvm config mirror remove
+uvm config python-mirror set https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone
+uvm config python-mirror show
+uvm config python-mirror remove
 ```
 
-- `config show`：输出当前生效的配置路径
-- `config mirror set`：验证并更新 uv 用户级 `uv.toml` 中的受管 PyPI 包索引 block（路径见下文「mirror 受管 block」）
-- 如果检测到会冲突的非 `uvm` 镜像配置，`uvm` 会给出警告并保持原文件不变
+- `config set envs-dir`：创建目录、保存配置，并登记目录里已有的环境。原来在别处的环境不会移动，也仍然保持登记。
+- `config mirror`：管理 PyPI 包索引（`[[index]]`），影响 `pip install` 从哪里下载包。
+- `config python-mirror`：管理 `python-install-mirror`，影响 uv 从哪里下载 Python 解释器（例如本机没有 3.12 时执行 `uvm create --python 3.12`）。国内用户这一步往往最慢。
+- 两者都写入 uv 的用户级 `uv.toml`（路径见下文「mirror 受管 block」）。如果文件里已有同类的非 `uvm` 配置，`uvm` 会保持原文件不变。
 
 ### `uvm shell-hook`
 
@@ -347,7 +359,8 @@ echo "shared-311" > .uvmrc
 ### 生效路径
 
 - `UVM_HOME`：默认 `~/.config/uvm`
-- `UVM_ENVS_DIR`：默认 `~/uv_envs`
+- `UVM_ENVS_DIR`：默认 `~/uv_envs`，可用 `uvm config set envs-dir <目录>` 修改
+- 配置文件：`~/.config/uvm/config`，内容是 `KEY="value"` 格式的普通文本，uvm 只解析、不执行
 - 元数据目录：`~/.config/uvm/envs.d`
 - 如果外部已经设置 `UVM_HOME`，安装器会沿用该值
 
@@ -405,8 +418,16 @@ default = true
 # <<< uvm mirror <<<
 ```
 
+`uvm config python-mirror set <url>` 会在同一个文件的最顶部写入自己的 block。原因是 `python-install-mirror` 是顶层配置项，必须写在所有 TOML 表之前：
+
+```toml
+# >>> uvm python-mirror >>>
+python-install-mirror = "https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone"
+# <<< uvm python-mirror <<<
+```
+
 如果目标文件原本已经存在，`uvm` 会保留一次性备份 `uv.toml.backup`。
-如果文件里已经存在非 `uvm` 管理的 `[[index]]` 或 `python-install-mirror`，`uvm` 会跳过写入。Python 安装镜像与 PyPI 包索引是不同配置，不能由同一个 URL 推断。
+已有非 `uvm` 管理的 `[[index]]` 时，`config mirror set` 不会写入；已有非 `uvm` 管理的 `python-install-mirror` 时，`config python-mirror set` 不会写入。两种情况都会保持原文件不变。两种镜像互相独立，不会由其中一个推断另一个。环境变量 `UV_DEFAULT_INDEX` / `UV_INDEX_URL` 和 `UV_PYTHON_INSTALL_MIRROR` 会覆盖这些配置，设置了的话 `uvm config show` 会提示。
 
 ## 常见问题与排障
 

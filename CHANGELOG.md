@@ -7,6 +7,27 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- `uvm config get/set envs-dir` changes the directory for new environments and registers the environments already inside it
+- `uvm config python-mirror set|show|remove` manages uv's `python-install-mirror` for Python interpreter downloads
+- `uvm update --check` reports the installed and available versions without installing
+- Installer option `--no-shell-hook`
+
+### Changed
+- `uvm config show` lists every effective setting, including the uv config file and both mirror URLs; `config mirror show` prints the configured URL
+- `uvm update` skips reinstalling when already on the latest release, keeps auto-activation off for users who installed without it, and reminds you to restart the shell
+- The uvm config file is parsed as `KEY="value"` lines instead of being sourced as shell code, and writes keep unrelated lines; the `printf %q` format written by earlier releases is still read
+- An unmanaged `python-install-mirror` no longer blocks `config mirror set`; only an unmanaged `[[index]]` does
+- Interactive reinstall offers the configured environment directory as the default
+- Removed the unused `templates/uv.toml.template`
+
+### Fixed
+- `uvm update` no longer ends with a bash `syntax error` and exit code 2 after a successful update: the installer now swaps files in with an atomic `mv` instead of overwriting the running `bin/uvm`, and `bin/uvm` exits on the same line that calls `main`
+
+---
+
 ## [1.2.2] — 2026-10-08
 
 ### Changed

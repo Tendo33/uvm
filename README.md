@@ -12,7 +12,7 @@
 
 </div>
 
-`uvm` keeps the familiar `create / activate / deactivate / list / delete` workflow, while delegating Python, virtual-environment, and package operations to `uv`. Version `1.2.2` writes mirror configuration where uv actually reads it (including `XDG_CONFIG_HOME` and Windows `%APPDATA%`) and keeps CI tracking the latest uv release, on top of the 1.2.1 hardening: trusted local activation, real `uv pip` package transfer, valid mirror configuration, stable rename semantics, and release-grade integration tests.
+`uvm` keeps the familiar `create / activate / deactivate / list / delete` workflow, while delegating Python, virtual-environment, and package operations to `uv`. Version `1.2.3` makes `uvm update` safe to run (no more false failure after a successful update), adds `uvm config set envs-dir` and a Python download mirror, and parses the config file instead of executing it. 1.2.2 wrote mirror configuration where uv actually reads it and keeps CI tracking the latest uv release, on top of the 1.2.1 hardening: trusted local activation, real `uv pip` package transfer, valid mirror configuration, stable rename semantics, and release-grade integration tests.
 
 ## Features
 
@@ -217,7 +217,7 @@ Local `.venv` activation scripts are executable shell code. `uvm` therefore refu
 ```bash
 uvm update            # latest release
 uvm update --check    # only report installed vs. available version
-uvm update v1.2.2     # a specific release; also reinstalls the current one
+uvm update v1.2.3     # a specific release; also reinstalls the current one
 ```
 
 `latest` resolves through GitHub Releases, refuses version downgrade, and preserves the configured environment directory. When you are already on the latest release it says so instead of reinstalling. If you installed without auto-activation, the update keeps it off. Restart your shell afterwards (`exec "$SHELL"`) so the current session loads the new version.

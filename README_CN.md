@@ -12,7 +12,7 @@
 
 </div>
 
-`uvm` 保留熟悉的 `create / activate / deactivate / list / delete` 工作流，同时把 Python、虚拟环境和包操作交给 `uv`。`1.2.2` 让镜像配置写到 uv 实际读取的位置（支持 `XDG_CONFIG_HOME` 与 Windows `%APPDATA%`），并让 CI 持续跟进最新版 uv；同时保留 1.2.1 的发布加固：本地环境显式信任、真实 `uv pip` 包迁移、合法镜像配置、稳定 rename 语义，以及真实环境集成测试。
+`uvm` 保留熟悉的 `create / activate / deactivate / list / delete` 工作流，同时把 Python、虚拟环境和包操作交给 `uv`。`1.2.3` 让 `uvm update` 可以放心使用（不再出现更新成功却报错的情况），新增 `uvm config set envs-dir` 和 Python 下载镜像配置，配置文件改为只解析、不执行。1.2.2 让镜像配置写到 uv 实际读取的位置，并让 CI 持续跟进最新版 uv；同时保留 1.2.1 的发布加固：本地环境显式信任、真实 `uv pip` 包迁移、合法镜像配置、稳定 rename 语义，以及真实环境集成测试。
 
 ## 功能概览
 
@@ -216,7 +216,7 @@ uvm untrust
 ```bash
 uvm update            # 更新到最新 release
 uvm update --check    # 只查看当前版本和最新版本，不安装
-uvm update v1.2.2     # 指定版本；也可用来重装当前版本
+uvm update v1.2.3     # 指定版本；也可用来重装当前版本
 ```
 
 `uvm update` 从 GitHub Latest Release 更新，拒绝降级并保留当前环境目录。已经是最新版时只会提示，不会重装。安装时没开自动激活的，更新后依然保持关闭。更新完成后请重开终端（`exec "$SHELL"`），让当前会话加载新版本。

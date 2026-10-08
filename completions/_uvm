@@ -93,13 +93,28 @@ _uvm() {
                 config)
                     if (( CURRENT == 3 )); then
                         local -a config_cmds
-                        config_cmds=('show:Show effective configuration' 'mirror:Manage mirror configuration')
+                        config_cmds=(
+                            'show:Show all effective settings'
+                            'get:Print a setting'
+                            'set:Change a setting'
+                            'mirror:Manage the PyPI package index mirror'
+                            'python-mirror:Manage the Python interpreter download mirror'
+                        )
                         _describe 'config subcommand' config_cmds
-                    elif (( CURRENT == 4 )) && [[ ${words[3]} == mirror ]]; then
+                    elif (( CURRENT == 4 )) && [[ ${words[3]} == (mirror|python-mirror) ]]; then
                         local -a mirror_cmds
-                        mirror_cmds=('set:Set a custom PyPI mirror URL' 'remove:Remove the managed mirror block' 'show:Show mirror status')
+                        mirror_cmds=('set:Set the mirror URL' 'remove:Remove the managed mirror' 'show:Show the configured mirror')
                         _describe 'mirror action' mirror_cmds
+                    elif (( CURRENT == 4 )) && [[ ${words[3]} == (get|set) ]]; then
+                        local -a config_keys
+                        config_keys=('envs-dir:Directory for new environments')
+                        _describe 'config key' config_keys
+                    elif (( CURRENT == 5 )) && [[ ${words[3]} == set ]]; then
+                        _files -/
                     fi
+                    ;;
+                update)
+                    _arguments '--check[Only report whether an update is available]'
                     ;;
                 scan)
                     _files -/

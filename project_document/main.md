@@ -26,7 +26,6 @@ uvm/
 │   ├── uvm-core.sh            # 生命周期、包操作、诊断、自更新
 │   └── uvm-shell-hooks.sh     # shell hook 与自动激活
 ├── completions/               # Bash/Zsh 补全
-├── templates/uv.toml.template
 ├── tests/uvm.bats
 ├── .github/workflows/
 │   ├── ci.yml
@@ -38,7 +37,8 @@ uvm/
 ### 配置层
 
 - `UVM_HOME` 默认 `~/.config/uvm`。
-- `UVM_ENVS_DIR` 默认 `~/uv_envs`，写入配置时保存为规范化绝对路径。
+- `UVM_ENVS_DIR` 默认 `~/uv_envs`，写入配置时保存为规范化绝对路径；可用 `uvm config set envs-dir` 修改。
+- 配置文件 `$(uvm_get_home)/config` 由 `uvm_read_config_value` 按 `KEY="value"` 解析，从不 `source`；写入只替换目标键，保留其他行。仍兼容旧版 `printf %q` 写出的格式。
 - 环境记录位于 `$(uvm_get_home)/envs.d`；写入和重命名在 metadata lock 下完成。
 - 本地环境信任清单位于 `$(uvm_get_home)/trusted-local-envs`，比较时使用规范路径。
 - 旧 `envs.json` 仅作为一次性迁移输入，不再是事实来源。
@@ -71,7 +71,7 @@ shell hook 不覆盖 `cd`：Zsh 使用 `chpwd`，Bash 使用 `PROMPT_COMMAND`。
 
 ## 4. Mirror 配置
 
-受管配置写入 `~/.config/uv/uv.toml`：
+受管配置写入 uv 实际读取的用户级 `uv.toml`（`$XDG_CONFIG_HOME/uv/uv.toml`、`~/.config/uv/uv.toml` 或 Windows `%APPDATA%\uv\uv.toml`）。PyPI 包索引 block：
 
 ```toml
 # >>> uvm mirror >>>
@@ -81,7 +81,9 @@ default = true
 # <<< uvm mirror <<<
 ```
 
-`uvm config mirror set <url>` 会拒绝无效协议、换行和引号；若检测到用户自行维护的 `[[index]]` 或 `python-install-mirror`，则停止并提示冲突，不抢占配置所有权。候选文件必须通过 `uv --config-file <file> python list --only-installed` 后才替换正式文件。
+`uvm config python-mirror set <url>` 写入 `python-install-mirror` block。它是顶层键，必须位于所有 TOML 表之前，因此总是写在文件顶部。
+
+两个命令都会拒绝无效协议、换行和引号；若检测到用户自行维护的同类配置（`[[index]]` 或 `python-install-mirror`），则停止并提示冲突，不抢占配置所有权。生成的片段必须先通过 `uv --config-file <file> python list --only-installed` 校验。
 
 ## 5. 安装与修复
 
@@ -105,7 +107,7 @@ CI 是发布工作流的必需依赖，覆盖：
 - Ubuntu、macOS 上的 BATS
 - 最低支持 uv 0.10.0、当前验证 uv 0.12.23，以及 uv `latest`
 - 每周定时运行一次，及早发现新版 uv 带来的回归
-- macOS 与 Windows Git Bash 生命周期 smoke test（uv 0.12.23 与 `latest`），并验证镜像配置被 uv 实际读取
+- macOS 与 Windows Git Bash 生命周期 smoke test（uv 0.12.23 与 `latest`），并验证 PyPI 镜像和 Python 下载镜像都被 uv 实际读取
 - 版本、文档和已退役实现的一致性检查
 
 发布仅由 `v*` tag 触发。release workflow 先运行同一套 CI，再校验 tag、`bin/uvm`、`install.sh`、下载 ref 和 changelog 一致，最后才创建 GitHub Release。失败不得被当成已发布版本。

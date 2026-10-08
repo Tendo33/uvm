@@ -578,12 +578,33 @@ uvm_delete() {
 }
 
 uvm_self_update() {
-    if [ "$#" -gt 1 ]; then
-        echo "Error: Usage: uvm update [v<version>]"
-        return 1
-    fi
-    local channel="${1:-latest}"
+    local channel="latest"
+    local target_given=false
+    local check_only=false
     local install_url
+    local current_version="${UVM_VERSION#v}"
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --check)
+                check_only=true
+                ;;
+            -*)
+                echo "Error: Unknown option: $1"
+                echo "Usage: uvm update [--check] [v<version>]"
+                return 1
+                ;;
+            *)
+                if [ "$target_given" = true ]; then
+                    echo "Error: Usage: uvm update [--check] [v<version>]"
+                    return 1
+                fi
+                channel="$1"
+                target_given=true
+                ;;
+        esac
+        shift
+    done
 
     if [ "$channel" != "latest" ] && [[ ! "$channel" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
         echo "Error: Update target must be 'latest' or a version tag such as v1.2.2"
@@ -601,7 +622,11 @@ uvm_self_update() {
         install_url="https://raw.githubusercontent.com/Tendo33/uvm/${channel}/install.sh"
     fi
 
-    echo "Updating uvm from ${install_url}..."
+    if [ "$check_only" = true ]; then
+        echo "Checking ${install_url}..."
+    else
+        echo "Updating uvm from ${install_url}..."
+    fi
     local tmp_install
     tmp_install=$(mktemp "${TMPDIR:-/tmp}/uvm-update.XXXXXX.sh") || return 1
 
@@ -631,17 +656,228 @@ uvm_self_update() {
         echo "Error: Downloaded installer declares an invalid version"
         return 1
     fi
-    if [ -n "${UVM_VERSION:-}" ] && ! uvm_version_is_at_least "$downloaded_version" "$UVM_VERSION"; then
+    if [ "$check_only" = true ]; then
         rm -f "$tmp_install"
-        echo "Error: Refusing to downgrade uvm ${UVM_VERSION} to ${downloaded_version}"
+        echo "Installed: ${current_version:-unknown}"
+        echo "Available: ${downloaded_version}"
+        if [ "$downloaded_version" = "$current_version" ]; then
+            echo "uvm is up to date"
+        elif [ -z "$current_version" ] || uvm_version_is_at_least "$downloaded_version" "$current_version"; then
+            echo "Update available. Run: uvm update"
+        else
+            echo "The available release is older than the installed version"
+        fi
+        return 0
+    fi
+
+    if [ -n "$current_version" ] && ! uvm_version_is_at_least "$downloaded_version" "$current_version"; then
+        rm -f "$tmp_install"
+        echo "Error: Refusing to downgrade uvm ${current_version} to ${downloaded_version}"
         return 1
     fi
 
+    if [ "$target_given" = false ] && [ "$downloaded_version" = "$current_version" ]; then
+        rm -f "$tmp_install"
+        echo "uvm ${current_version} is already up to date"
+        echo "  To reinstall it anyway, run: uvm update v${current_version}"
+        return 0
+    fi
+
+    local -a installer_args=(-y --envs-dir "$(uvm_get_default_envs_dir)")
+    # Respect users who installed without auto-activation.
+    if ! uvm_is_shell_hook_configured "$(get_shell_rc_file)"; then
+        installer_args+=(--no-shell-hook)
+    fi
+
     UVM_HOME="$(uvm_get_home)" UVM_ENVS_DIR="$(uvm_get_default_envs_dir)" \
-        bash "$tmp_install" -y --envs-dir "$(uvm_get_default_envs_dir)"
+        bash "$tmp_install" "${installer_args[@]}"
     local update_status=$?
     rm -f "$tmp_install"
+    if [ "$update_status" -eq 0 ]; then
+        echo ""
+        echo "uvm updated to ${downloaded_version}"
+        echo "  Restart your shell to load it: exec \"\$SHELL\""
+    fi
     return "$update_status"
+}
+
+uvm_config_usage() {
+    cat <<'EOF'
+Usage:
+  uvm config show
+  uvm config get envs-dir
+  uvm config set envs-dir <path>
+  uvm config mirror        <show | set <url> | remove>    PyPI package index
+  uvm config python-mirror <show | set <url> | remove>    Python interpreter downloads
+EOF
+}
+
+uvm_config_set_envs_dir() {
+    local envs_dir="$1"
+    local registered_count
+
+    if [ -z "$envs_dir" ]; then
+        uvm_config_usage
+        return 1
+    fi
+    mkdir -p "$envs_dir" || return 1
+    envs_dir=$(uvm_resolve_existing_path "$envs_dir") || return 1
+
+    uvm_write_config_value UVM_ENVS_DIR "$envs_dir" || return 1
+    export UVM_ENVS_DIR="$envs_dir"
+    init_uvm_config || return 1
+    registered_count=$(scan_and_register_envs "$envs_dir")
+
+    echo "Environment directory set to: ${envs_dir}"
+    echo "  Registered ${registered_count} environment(s) found there"
+    echo "  Existing environments stay where they are and remain registered."
+}
+
+uvm_config_show() {
+    local pypi_mirror
+    local python_mirror
+
+    pypi_mirror=$(uvm_get_pypi_mirror_url) || pypi_mirror="not set"
+    python_mirror=$(uvm_get_python_mirror_url) || python_mirror="not set"
+
+    echo "uvm configuration"
+    echo "  uvm version       : ${UVM_VERSION:-unknown}"
+    echo "  UVM_HOME          : $(uvm_get_home)"
+    echo "  Config file       : $(uvm_get_config_file)"
+    echo "  envs-dir          : $(uvm_get_default_envs_dir)"
+    echo "  Metadata directory: $(uvm_get_env_records_dir)"
+    echo "  Shell             : $(detect_shell)"
+    echo "  Shell RC          : $(get_shell_rc_file)"
+    echo "  uv config file    : $(uvm_get_uv_config_file)"
+    echo "  PyPI mirror       : ${pypi_mirror}"
+    echo "  Python mirror     : ${python_mirror}"
+    if [ -n "${UV_DEFAULT_INDEX:-}${UV_INDEX_URL:-}" ]; then
+        echo "  Note: UV_DEFAULT_INDEX / UV_INDEX_URL is set and overrides the PyPI mirror"
+    fi
+    if [ -n "${UV_PYTHON_INSTALL_MIRROR:-}" ]; then
+        echo "  Note: UV_PYTHON_INSTALL_MIRROR is set and overrides the Python mirror"
+    fi
+}
+
+# kind: "pypi" or "python"
+uvm_config_mirror_command() {
+    local kind="$1"
+    local action="${2:-show}"
+    local label="mirror"
+    local title="PyPI mirror"
+    local example="https://pypi.tuna.tsinghua.edu.cn/simple"
+    local start_marker
+    local end_marker
+    local url
+
+    shift
+    [ $# -gt 0 ] && shift
+    if [ "$kind" = "python" ]; then
+        label="python-mirror"
+        title="Python mirror"
+        example="https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone"
+        start_marker=$(uvm_get_python_mirror_start_marker)
+        end_marker=$(uvm_get_python_mirror_end_marker)
+    else
+        start_marker=$(uvm_get_mirror_start_marker)
+        end_marker=$(uvm_get_mirror_end_marker)
+    fi
+
+    case "$action" in
+        set)
+            if [ $# -ne 1 ] || [ -z "$1" ]; then
+                echo "Usage: uvm config ${label} set <url>"
+                echo "Example: uvm config ${label} set ${example}"
+                return 1
+            fi
+            if [ "$kind" = "python" ]; then
+                setup_uv_python_mirror "$1" || return 1
+            else
+                setup_uv_mirror "$1" || return 1
+            fi
+            echo "${title} set to: $1"
+            echo "  Written to: $(uvm_get_uv_config_file)"
+            ;;
+        remove)
+            if [ $# -ne 0 ]; then
+                echo "Usage: uvm config ${label} remove"
+                return 1
+            fi
+            uvm_remove_managed_block "$(uvm_get_uv_config_file)" "$start_marker" "$end_marker" || return 1
+            if [ "$kind" = "pypi" ]; then
+                uvm_remove_stale_mirror_config || return 1
+            fi
+            echo "${title} removed from $(uvm_get_uv_config_file)"
+            ;;
+        show)
+            if [ $# -ne 0 ]; then
+                echo "Usage: uvm config ${label} show"
+                return 1
+            fi
+            if [ "$kind" = "python" ]; then
+                url=$(uvm_get_python_mirror_url)
+            else
+                url=$(uvm_get_pypi_mirror_url)
+            fi
+            if [ -n "$url" ]; then
+                echo "${title}: ${url}"
+                echo "  Configured in: $(uvm_get_uv_config_file)"
+            else
+                echo "No managed ${title} configured"
+                echo "  To add: uvm config ${label} set <url>"
+                echo "  Example: uvm config ${label} set ${example}"
+            fi
+            ;;
+        *)
+            echo "Usage: uvm config ${label} <show | set <url> | remove>"
+            return 1
+            ;;
+    esac
+}
+
+uvm_config_command() {
+    local subcommand="${1:-show}"
+    shift || true
+
+    case "$subcommand" in
+        show)
+            uvm_config_show
+            ;;
+        get)
+            case "${1:-}" in
+                envs-dir)
+                    [ $# -eq 1 ] || { uvm_config_usage; return 1; }
+                    uvm_get_default_envs_dir
+                    ;;
+                *)
+                    echo "Error: Unknown config key: ${1:-}. Supported keys: envs-dir"
+                    return 1
+                    ;;
+            esac
+            ;;
+        set)
+            case "${1:-}" in
+                envs-dir)
+                    [ $# -eq 2 ] || { uvm_config_usage; return 1; }
+                    uvm_config_set_envs_dir "$2"
+                    ;;
+                *)
+                    echo "Error: Unknown config key: ${1:-}. Supported keys: envs-dir"
+                    return 1
+                    ;;
+            esac
+            ;;
+        mirror|mirrors)
+            uvm_config_mirror_command pypi "$@"
+            ;;
+        python-mirror)
+            uvm_config_mirror_command python "$@"
+            ;;
+        *)
+            uvm_config_usage
+            return 1
+            ;;
+    esac
 }
 
 uvm_print_env_entry() {
@@ -948,17 +1184,21 @@ COMMANDS:
     scan [directory]           Scan a directory and register valid environments
     repair                     Rebuild metadata and shell hook
     doctor                     Diagnose shell integration and metadata health
-    update                     Update uvm to the latest release
+    update [v<version>]        Update uvm to the latest (or given) release
+        --check                Only report whether an update is available
     trust [path]               Trust a local .venv for auto-activation
     trust list                 List trusted local environments
     untrust [path]             Revoke local .venv auto-activation trust
     help                       Show this help message
 
 CONFIG:
-    config show                Show effective configuration paths
-    config mirror show         Show mirror configuration status
-    config mirror set <url>    Configure a custom PyPI mirror
-    config mirror remove       Remove the managed mirror block
+    config show                Show all effective settings
+    config get envs-dir        Print the environment directory
+    config set envs-dir <dir>  Change the directory for new environments
+    config mirror show|set <url>|remove
+                               PyPI package index mirror
+    config python-mirror show|set <url>|remove
+                               Mirror for uv's Python interpreter downloads
 
 AUTO-ACTIVATION:
     Enable shell integration by adding:
@@ -970,7 +1210,7 @@ AUTO-ACTIVATION:
 
 CONFIGURATION:
     UVM_HOME defaults to ~/.config/uvm
-    UVM_ENVS_DIR defaults to ~/uv_envs
+    envs-dir defaults to ~/uv_envs (change with: uvm config set envs-dir <dir>)
 
 EOF
 }

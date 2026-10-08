@@ -5,10 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/uvm-config.sh"
 
 uvm_shell_load_runtime_config() {
+    local configured_envs_dir
+
     export UVM_HOME="${UVM_HOME:-${HOME}/.config/uvm}"
-    if [ -f "$(uvm_get_config_file)" ]; then
-        # shellcheck source=/dev/null
-        source "$(uvm_get_config_file)"
+    if configured_envs_dir=$(uvm_read_config_value UVM_ENVS_DIR); then
+        UVM_ENVS_DIR="$configured_envs_dir"
     fi
     export UVM_ENVS_DIR="${UVM_ENVS_DIR:-${HOME}/uv_envs}"
 }
@@ -252,6 +253,7 @@ uvm_generate_shell_hook() {
 # UVM shell hook
 $(declare -f uvm_get_home)
 $(declare -f uvm_get_config_file)
+$(declare -f uvm_read_config_value)
 $(declare -f uvm_get_default_envs_dir)
 $(declare -f uvm_get_env_records_dir)
 $(declare -f uvm_get_trusted_envs_file)

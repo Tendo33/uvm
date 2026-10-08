@@ -91,7 +91,7 @@ This writes the selected directory into `$(uvm config show)` through `UVM_HOME/c
 
 ### Advanced: override the remote download ref
 
-When you download a release-scoped `install.sh`, the installer downloads `bin/`, `lib/`, and `templates/` from the matching `v<version>` ref by default.
+When you download a release-scoped `install.sh`, the installer downloads `bin/`, `lib/`, and `completions/` from the matching `v<version>` ref by default.
 
 If you intentionally want another ref, override it explicitly:
 
@@ -215,11 +215,12 @@ Local `.venv` activation scripts are executable shell code. `uvm` therefore refu
 ### `uvm update`
 
 ```bash
-uvm update
-uvm update v1.2.2
+uvm update            # latest release
+uvm update --check    # only report installed vs. available version
+uvm update v1.2.2     # a specific release; also reinstalls the current one
 ```
 
-`latest` resolves through GitHub Releases, refuses version downgrade, and preserves the configured environment directory.
+`latest` resolves through GitHub Releases, refuses version downgrade, and preserves the configured environment directory. When you are already on the latest release it says so instead of reinstalling. If you installed without auto-activation, the update keeps it off. Restart your shell afterwards (`exec "$SHELL"`) so the current session loads the new version.
 
 Upgrading from a release older than 1.2.0 (`uvm version` shows 1.0.x or 1.1.x, and `uvm update` reports `Unknown command`): reinstall once, then `uvm update` is available from then on. Existing environments and the configured environment directory are kept.
 
@@ -289,15 +290,21 @@ It does not delete valid environments automatically.
 ### `uvm config`
 
 ```bash
-uvm config show
+uvm config show                          # every effective setting, including both mirrors
+uvm config get envs-dir
+uvm config set envs-dir ~/my-envs        # directory for new environments
+uvm config mirror set https://pypi.tuna.tsinghua.edu.cn/simple
 uvm config mirror show
-uvm config mirror set https://pypi.example.com/simple
 uvm config mirror remove
+uvm config python-mirror set https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone
+uvm config python-mirror show
+uvm config python-mirror remove
 ```
 
-`config show` prints the effective config paths.  
-`config mirror set` validates and replaces the managed PyPI index block in uv's user config file (see [Managed mirror block](#managed-mirror-block)).
-If `uvm` detects unmanaged mirror sections that would conflict, it warns and leaves the file unchanged.
+- `config set envs-dir` creates the directory, saves it, and registers any environments already inside it. Existing environments elsewhere stay where they are and remain registered.
+- `config mirror` manages the PyPI package index (`[[index]]`) used for `pip install`.
+- `config python-mirror` manages `python-install-mirror`, which uv uses to download Python interpreters (`uvm create --python 3.12` on a machine without that version).
+- Both are written to uv's user config file (see [Managed mirror block](#managed-mirror-block)). If an unmanaged setting of the same kind already exists, `uvm` leaves the file unchanged.
 
 ### `uvm shell-hook`
 
@@ -355,7 +362,8 @@ Any directory inside that project tree inherits the nearest parent `.uvmrc`.
 ### Effective paths
 
 - `UVM_HOME`: defaults to `~/.config/uvm`
-- `UVM_ENVS_DIR`: defaults to `~/uv_envs`
+- `UVM_ENVS_DIR`: defaults to `~/uv_envs`; change it with `uvm config set envs-dir <dir>`
+- config file: `~/.config/uvm/config`, plain `KEY="value"` lines that uvm parses but never executes
 - metadata directory: `~/.config/uvm/envs.d`
 - the installer respects an already-exported `UVM_HOME`
 
@@ -413,8 +421,16 @@ default = true
 # <<< uvm mirror <<<
 ```
 
+`uvm config python-mirror set <url>` writes its own block at the top of the same file, because `python-install-mirror` is a top-level key and must come before any TOML table:
+
+```toml
+# >>> uvm python-mirror >>>
+python-install-mirror = "https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone"
+# <<< uvm python-mirror <<<
+```
+
 If `uv.toml` already exists, `uvm` keeps a one-time backup as `uv.toml.backup`.
-If an unmanaged `[[index]]` or `python-install-mirror` setting is already present, `uvm` skips writing its managed block to avoid ambiguous global configuration. Python-install mirrors are deliberately separate from PyPI package indexes and are not inferred from a package mirror URL.
+An unmanaged `[[index]]` blocks `config mirror set`, and an unmanaged `python-install-mirror` blocks `config python-mirror set`; in both cases the file is left unchanged. The two mirrors are independent and neither is inferred from the other. The `UV_DEFAULT_INDEX` / `UV_INDEX_URL` and `UV_PYTHON_INSTALL_MIRROR` environment variables override them, and `uvm config show` points this out when they are set.
 
 ## Troubleshooting
 

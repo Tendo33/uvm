@@ -424,12 +424,26 @@ EOF
 
     run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
 
+    [ "$status" -eq 0 ]
+    run cat "$uv_config_file"
+    [[ "$output" == *'python-install-mirror = "https://example.com/python"'* ]]
+    [[ "$output" == *"# >>> uvm mirror >>>"* ]]
+    uv --config-file "$uv_config_file" python list --only-installed >/dev/null
+}
+
+@test "setup_uv_mirror refuses to add a second default index next to an unmanaged one" {
+    local uv_config_file="${HOME}/.config/uv/uv.toml"
+    mkdir -p "${HOME}/.config/uv"
+    cat > "$uv_config_file" <<'EOF'
+[[index]]
+url = "https://example.com/simple"
+EOF
+
+    run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
+
     [ "$status" -ne 0 ]
     [[ "$output" == *"conflict"* ]]
-    run cat "$uv_config_file"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *'python-install-mirror = "https://example.com/python"'* ]]
-    [[ "$output" != *"# >>> uvm mirror >>>"* ]]
+    ! grep -q "# >>> uvm mirror >>>" "$uv_config_file"
 }
 
 @test "uvm_create rejects duplicate environment names even when a new --path is provided" {
@@ -543,16 +557,25 @@ EOF
     [[ "$output" == *"requires a path"* ]]
 }
 
-@test "install_uvm stores templates under the effective UVM_HOME" {
+@test "install_uvm replaces files atomically and drops the legacy template" {
     load_install_functions
     export UVM_HOME="${TEST_HOME}/custom-uvm-home"
+    mkdir -p "${UVM_HOME}/templates"
+    touch "${UVM_HOME}/templates/uv.toml.template"
+    install_uvm "${BATS_TEST_DIRNAME}/.." >/dev/null
+    local first_inode
+    first_inode=$(ls -i "${HOME}/.local/bin/uvm" | awk '{print $1}')
 
     run install_uvm "${BATS_TEST_DIRNAME}/.."
 
     [ "$status" -eq 0 ]
-    [ -d "${UVM_HOME}/templates" ]
-    [ -f "${UVM_HOME}/templates/uv.toml.template" ]
-    [ ! -d "${TEST_HOME}/.config/uvm/templates" ]
+    # A new inode means a running bin/uvm keeps reading its own, unmodified file.
+    [ "$(ls -i "${HOME}/.local/bin/uvm" | awk '{print $1}')" != "$first_inode" ]
+    [ -x "${HOME}/.local/bin/uvm" ]
+    grep -q "LIB_DIR=\"${HOME}/.local/lib/uvm\"" "${HOME}/.local/bin/uvm"
+    [ -f "${HOME}/.local/lib/uvm/uvm-core.sh" ]
+    [ -z "$(find "${HOME}/.local/bin" "${HOME}/.local/lib/uvm" -name '.uvm*')" ]
+    [ ! -d "${UVM_HOME}/templates" ]
 }
 
 @test "remote install downloads default to the current release ref" {
@@ -778,4 +801,222 @@ EOF
 
     run uvm_doctor
     [[ "$output" != *"Stale mirror block"* ]]
+}
+
+use_fake_installer() {
+    local version="$1"
+    local fake_bin="${TEST_HOME}/fake-bin"
+    export UVM_FAKE_INSTALLER="${TEST_HOME}/fake-install.sh"
+    export UVM_UPDATE_MARKER="${TEST_HOME}/update-marker"
+    mkdir -p "$fake_bin"
+    cat > "$UVM_FAKE_INSTALLER" <<EOF
+#!/bin/bash
+UVM_INSTALL_VERSION="${version}"
+printf 'arg=%s\n' "\$@" > "\$UVM_UPDATE_MARKER"
+EOF
+    cat > "${fake_bin}/curl" <<'EOF'
+#!/bin/bash
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = "-o" ]; then
+        cp "$UVM_FAKE_INSTALLER" "$2"
+        exit 0
+    fi
+    shift
+done
+exit 1
+EOF
+    chmod +x "${fake_bin}/curl"
+    PATH="${fake_bin}:${PATH}"
+}
+
+@test "uvm update does not reinstall when already up to date" {
+    use_fake_installer "1.2.3"
+    UVM_VERSION="1.2.3"
+
+    run uvm_self_update
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"already up to date"* ]]
+    [[ "$output" == *"uvm update v1.2.3"* ]]
+    [ ! -f "$UVM_UPDATE_MARKER" ]
+
+    run uvm_self_update v1.2.3
+    [ "$status" -eq 0 ]
+    [ -f "$UVM_UPDATE_MARKER" ]
+}
+
+@test "uvm update --check reports without installing" {
+    use_fake_installer "1.3.0"
+    UVM_VERSION="1.2.3"
+
+    run uvm_self_update --check
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Installed: 1.2.3"* ]]
+    [[ "$output" == *"Available: 1.3.0"* ]]
+    [[ "$output" == *"Update available"* ]]
+    [ ! -f "$UVM_UPDATE_MARKER" ]
+
+    run uvm_self_update --bogus
+    [ "$status" -ne 0 ]
+}
+
+@test "uvm update keeps auto-activation off when the shell hook is not configured" {
+    use_fake_installer "1.3.0"
+    UVM_VERSION="1.2.3"
+    export SHELL=/bin/bash
+
+    run uvm_self_update
+    [ "$status" -eq 0 ]
+    grep -Fqx "arg=--no-shell-hook" "$UVM_UPDATE_MARKER"
+    [[ "$output" == *"uvm updated to 1.3.0"* ]]
+    [[ "$output" == *"Restart your shell"* ]]
+
+    uvm_ensure_shell_hook_configured "$(get_shell_rc_file)"
+    run uvm_self_update
+    [ "$status" -eq 0 ]
+    ! grep -Fqx "arg=--no-shell-hook" "$UVM_UPDATE_MARKER"
+}
+
+@test "installer --no-shell-hook leaves the shell rc without a hook block" {
+    export SHELL=/bin/bash
+    touch "${HOME}/.bashrc" "${HOME}/.bash_profile"
+
+    run bash "${BATS_TEST_DIRNAME}/../install.sh" -y --no-shell-hook
+    [ "$status" -eq 0 ]
+    ! grep -q "# >>> uvm shell >>>" "${HOME}/.bashrc" "${HOME}/.bash_profile"
+
+    run bash "${BATS_TEST_DIRNAME}/../install.sh" -y
+    [ "$status" -eq 0 ]
+    grep -q "# >>> uvm shell >>>" "${HOME}/.bashrc" "${HOME}/.bash_profile"
+}
+
+@test "uvm update survives a longer bin/uvm replacing the running one" {
+    local next="${TEST_HOME}/next"
+    mkdir -p "$next"
+    cp -R "${BATS_TEST_DIRNAME}/../bin" "${BATS_TEST_DIRNAME}/../lib" \
+        "${BATS_TEST_DIRNAME}/../completions" "${BATS_TEST_DIRNAME}/../install.sh" "$next/"
+    sed -i.bak 's/^UVM_VERSION=".*"/UVM_VERSION="99.0.0"/' "${next}/bin/uvm"
+    sed -i.bak 's/^UVM_INSTALL_VERSION=".*"/UVM_INSTALL_VERSION="99.0.0"/' "${next}/install.sh"
+    printf '# %s\n' "$(printf 'x%.0s' $(seq 1 400))" >> "${next}/bin/uvm"
+    use_fake_installer "99.0.0"
+    printf 'exec bash %q "$@" >/dev/null\n' "${next}/install.sh" >> "$UVM_FAKE_INSTALLER"
+    export SHELL=/bin/bash
+    bash "${BATS_TEST_DIRNAME}/../install.sh" -y >/dev/null
+
+    run "${HOME}/.local/bin/uvm" update
+
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"syntax error"* ]]
+    [[ "$output" == *"uvm updated to 99.0.0"* ]]
+    grep -q 'UVM_VERSION="99.0.0"' "${HOME}/.local/bin/uvm"
+}
+
+@test "config file is parsed, never executed, and accepts the legacy %q format" {
+    init_uvm_config
+    local config_file
+    config_file=$(uvm_get_config_file)
+
+    printf 'UVM_ENVS_DIR=%q\n' "${TEST_HOME}/legacy envs" > "$config_file"
+    [ "$(uvm_read_config_value UVM_ENVS_DIR)" = "${TEST_HOME}/legacy envs" ]
+
+    printf 'UVM_ENVS_DIR="$(touch %s/pwned)/envs"\n' "$TEST_HOME" > "$config_file"
+    unset UVM_ENVS_DIR
+    uvm_load_user_config
+    [ ! -e "${TEST_HOME}/pwned" ]
+    [ "$UVM_ENVS_DIR" = "\$(touch ${TEST_HOME}/pwned)/envs" ]
+}
+
+@test "uvm_write_config_value keeps unrelated lines and rejects quotes" {
+    init_uvm_config
+    local config_file
+    config_file=$(uvm_get_config_file)
+    printf 'SOME_FUTURE_KEY="keep me"\nUVM_ENVS_DIR="/old"\n' > "$config_file"
+
+    uvm_write_config_value UVM_ENVS_DIR "/new path"
+
+    grep -Fqx 'SOME_FUTURE_KEY="keep me"' "$config_file"
+    grep -Fqx 'UVM_ENVS_DIR="/new path"' "$config_file"
+    [ "$(grep -c '^UVM_ENVS_DIR=' "$config_file")" -eq 1 ]
+    run uvm_write_config_value UVM_ENVS_DIR 'bad"value'
+    [ "$status" -ne 0 ]
+}
+
+@test "uvm config set envs-dir persists the directory and registers its environments" {
+    init_uvm_config
+    local new_dir="${TEST_HOME}/new envs"
+    make_fake_env "${new_dir}/found"
+
+    run uvm_config_command set envs-dir "$new_dir"
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Registered 1 environment"* ]]
+    unset UVM_ENVS_DIR
+    uvm_load_user_config
+    [ "$UVM_ENVS_DIR" = "$(cd "$new_dir" && pwd -P)" ]
+    [ "$(uvm_config_command get envs-dir)" = "$UVM_ENVS_DIR" ]
+    [ -f "$(uvm_get_env_records_dir)/found.env" ]
+
+    run uvm_config_command set unknown-key x
+    [ "$status" -ne 0 ]
+}
+
+@test "python-mirror is written above every TOML table so uv accepts it" {
+    local uv_config_file="${HOME}/.config/uv/uv.toml"
+    mkdir -p "${HOME}/.config/uv"
+    printf '[pip]\nindex-strategy = "first-index"\n' > "$uv_config_file"
+    setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+    run uvm_config_command python-mirror set "https://example.com/python-build-standalone"
+
+    [ "$status" -eq 0 ]
+    [ "$(head -n 1 "$uv_config_file")" = "# >>> uvm python-mirror >>>" ]
+    uv --config-file "$uv_config_file" python list --only-installed >/dev/null
+
+    run uvm_config_command python-mirror set "https://example.com/second"
+    [ "$status" -eq 0 ]
+    [ "$(grep -c 'python-install-mirror' "$uv_config_file")" -eq 1 ]
+    run uvm_config_command python-mirror show
+    [[ "$output" == *"Python mirror: https://example.com/second"* ]]
+
+    run uvm_config_command show
+    [[ "$output" == *"PyPI mirror       : https://pypi.tuna.tsinghua.edu.cn/simple"* ]]
+    [[ "$output" == *"Python mirror     : https://example.com/second"* ]]
+
+    run uvm_config_command python-mirror remove
+    [ "$status" -eq 0 ]
+    ! grep -q 'python-install-mirror' "$uv_config_file"
+    grep -q 'pypi.tuna.tsinghua.edu.cn' "$uv_config_file"
+    grep -q 'index-strategy' "$uv_config_file"
+}
+
+@test "python-mirror refuses to override an unmanaged python-install-mirror" {
+    local uv_config_file="${HOME}/.config/uv/uv.toml"
+    mkdir -p "${HOME}/.config/uv"
+    printf 'python-install-mirror = "https://mine.example.com"\n' > "$uv_config_file"
+
+    run uvm_config_command python-mirror set "https://example.com/python"
+
+    [ "$status" -ne 0 ]
+    [ "$(cat "$uv_config_file")" = 'python-install-mirror = "https://mine.example.com"' ]
+}
+
+@test "mirror show prints the configured URL" {
+    setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+    run uvm_config_command mirror show
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"PyPI mirror: https://pypi.tuna.tsinghua.edu.cn/simple"* ]]
+}
+
+@test "interactive installer defaults to the configured environments directory" {
+    load_install_functions
+    mkdir -p "$UVM_HOME"
+    printf 'UVM_ENVS_DIR="%s"\n' "${TEST_HOME}/configured" > "${UVM_HOME}/config"
+    unset UVM_ENVS_DIR
+
+    interactive_setup "${BATS_TEST_DIRNAME}/.." <<< $'\n\n\n'
+
+    [ "$UVM_SETUP_ENVS_DIR" = "${TEST_HOME}/configured" ]
 }

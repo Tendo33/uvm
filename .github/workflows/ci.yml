@@ -138,6 +138,13 @@ jobs:
 
             uvm config mirror remove
             ! grep -q '# >>> uvm mirror >>>' "$expected"
+
+            uvm config python-mirror set "https://uvm-python-probe.invalid/pbs"
+            [[ "$(uvm config show)" == *"Python mirror     : https://uvm-python-probe.invalid/pbs"* ]]
+            install_output="$(UV_PYTHON_INSTALL_DIR="$RUNNER_TEMP/probe-python" uv python install --reinstall 3.9 2>&1 || true)"
+            [[ "$install_output" == *"uvm-python-probe.invalid"* ]]
+            uvm config python-mirror remove
+            ! grep -q 'python-install-mirror' "$expected"
           }
 
           check_mirror
@@ -156,7 +163,7 @@ jobs:
           grep -q '1.2.2' README.md
           grep -q '1.2.2' README_CN.md
           if grep -R -n '\[python-downloads\]' \
-              README.md README_CN.md EXAMPLES.md project_document templates lib; then
+              README.md README_CN.md EXAMPLES.md project_document lib; then
             echo "Retired invalid [python-downloads] table is still documented or emitted"
             exit 1
           fi

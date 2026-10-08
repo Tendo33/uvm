@@ -390,8 +390,8 @@ rm .uvmrc
 **解决方法：**
 
 ```bash
-# 验证镜像配置
-cat ~/.config/uv/uv.toml
+# 验证镜像配置（实际路径见 uvm doctor 的 "UV config file"）
+uvm config mirror show
 
 # 应该显示清华镜像
 # 如果没有，重新配置

@@ -7,6 +7,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- CI now tests uv 0.10.0, 0.12.23, and `latest`, and runs weekly to catch regressions from new uv releases
+- The install-and-lifecycle smoke test now runs on both macOS and Windows Git Bash against uv 0.12.23 and `latest`, and checks that uv itself reads the mirror block, including with `XDG_CONFIG_HOME` set
+- `uvm doctor` shows the resolved uv config file and reports stale mirror blocks
+
+### Fixed
+- Mirror configuration is written where uv actually reads it: `$XDG_CONFIG_HOME/uv/uv.toml` when set, and `%APPDATA%\uv\uv.toml` on Windows Git Bash
+- Managed mirror blocks left by earlier releases in an ignored `~/.config/uv/uv.toml` are removed on the next `config mirror set` or `config mirror remove`
+
+---
+
 ## [1.2.1] — 2026-08-07
 
 ### Added

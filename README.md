@@ -285,7 +285,7 @@ uvm config mirror remove
 ```
 
 `config show` prints the effective config paths.  
-`config mirror set` validates and replaces the managed PyPI index block in `~/.config/uv/uv.toml`.
+`config mirror set` validates and replaces the managed PyPI index block in uv's user config file (see [Managed mirror block](#managed-mirror-block)).
 If `uvm` detects unmanaged mirror sections that would conflict, it warns and leaves the file unchanged.
 
 ### `uvm shell-hook`
@@ -385,7 +385,14 @@ These markers make install, repair, reinstall, and uninstall idempotent.
 
 ### Managed mirror block
 
-`uvm config mirror set <url>` updates only the managed PyPI index block inside `~/.config/uv/uv.toml`:
+`uvm config mirror set <url>` updates only the managed PyPI index block inside uv's user-level `uv.toml`, at the same location uv reads:
+
+- Linux / macOS: `$XDG_CONFIG_HOME/uv/uv.toml` when `XDG_CONFIG_HOME` is an absolute path, otherwise `~/.config/uv/uv.toml`
+- Windows Git Bash: `%APPDATA%\uv\uv.toml`
+
+`uvm doctor` prints the resolved path. A managed block left in `~/.config/uv/uv.toml` by uvm 1.2.1 or earlier, where uv does not read it, is reported by `uvm doctor` and removed by the next `config mirror set` or `config mirror remove`.
+
+
 
 ```toml
 # >>> uvm mirror >>>
@@ -488,7 +495,7 @@ Uninstall keeps:
 
 - your virtual environments
 - `uv`
-- `~/.config/uv/uv.toml`
+- uv's `uv.toml`
 
 If you installed with a custom `UVM_HOME`, export the same value before uninstalling:
 

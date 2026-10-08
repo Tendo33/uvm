@@ -221,6 +221,17 @@ uvm update v1.2.2
 
 `latest` resolves through GitHub Releases, refuses version downgrade, and preserves the configured environment directory.
 
+Upgrading from a release older than 1.2.0 (`uvm version` shows 1.0.x or 1.1.x, and `uvm update` reports `Unknown command`): reinstall once, then `uvm update` is available from then on. Existing environments and the configured environment directory are kept.
+
+```bash
+curl -fsSL https://github.com/Tendo33/uvm/releases/latest/download/install.sh -o install.sh
+bash install.sh -y
+rm install.sh
+exec "$SHELL"
+```
+
+Older installers appended a bare `eval "$(uvm shell-hook)"` line to your shell rc file. The new installer writes its own block between `# >>> uvm shell >>>` markers, so delete the old bare line to avoid loading the hook twice.
+
 ### `uvm scan`
 
 ```bash

@@ -215,6 +215,17 @@ uvm untrust
 
 `uvm update` 从 GitHub Latest Release 更新，拒绝降级并保留当前环境目录；也可显式传入 `v1.2.2` 这样的 tag。
 
+从 1.2.0 之前的版本升级（`uvm version` 显示 1.0.x 或 1.1.x，执行 `uvm update` 提示 `Unknown command`）：需要先手动重装一次，之后就可以直接用 `uvm update`。已有环境和环境目录配置都会保留。
+
+```bash
+curl -fsSL https://github.com/Tendo33/uvm/releases/latest/download/install.sh -o install.sh
+bash install.sh -y
+rm install.sh
+exec "$SHELL"
+```
+
+旧版安装器会在 shell rc 文件里直接追加一行 `eval "$(uvm shell-hook)"`。新版安装器会写入带 `# >>> uvm shell >>>` 标记的受管 block，请删掉那行旧的，避免 hook 加载两次。
+
 ### `uvm scan`
 
 ```bash

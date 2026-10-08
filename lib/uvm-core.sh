@@ -796,6 +796,7 @@ uvm_doctor() {
     local uv_status="missing"
     local path_status="missing"
     local mirror_status="missing"
+    local stale_mirror_file
 
     init_uvm_config || return 1
     shell_rc=$(get_shell_rc_file)
@@ -856,11 +857,16 @@ uvm_doctor() {
         echo "UV                : ${uv_status}"
     fi
 
+    echo "UV config file    : $(uvm_get_uv_config_file)"
     if [ "$mirror_status" = "configured" ]; then
         echo "Mirror block      : configured"
     else
         echo "Mirror block      : not configured (optional)"
         echo "  -> To add: uvm config mirror set <url>"
+    fi
+    if stale_mirror_file=$(uvm_get_stale_mirror_config_file); then
+        echo "Stale mirror block: ${stale_mirror_file} (ignored by uv)"
+        echo "  -> Fix: uvm config mirror set <url>  (or: uvm config mirror remove)"
     fi
 
     if [ -n "${VIRTUAL_ENV:-}" ]; then

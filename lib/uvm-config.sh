@@ -24,12 +24,61 @@ uvm_get_legacy_envs_file() {
     echo "$(uvm_get_home)/envs.json"
 }
 
+# Mirrors uv's user-level config lookup:
+# %APPDATA%\uv on Windows, otherwise $XDG_CONFIG_HOME/uv (absolute only) or ~/.config/uv.
 uvm_get_uv_config_dir() {
-    echo "${HOME}/.config/uv"
+    local platform="${UVM_PLATFORM_OVERRIDE:-$(uvm_detect_platform)}"
+
+    if [ "$platform" = "windows" ] && [ -n "${APPDATA:-}" ]; then
+        if command -v cygpath >/dev/null 2>&1; then
+            echo "$(cygpath -u "$APPDATA")/uv"
+        else
+            echo "${APPDATA}/uv"
+        fi
+        return 0
+    fi
+
+    case "${XDG_CONFIG_HOME:-}" in
+        /*)
+            echo "${XDG_CONFIG_HOME%/}/uv"
+            ;;
+        *)
+            echo "${HOME}/.config/uv"
+            ;;
+    esac
 }
 
 uvm_get_uv_config_file() {
     echo "$(uvm_get_uv_config_dir)/uv.toml"
+}
+
+# uvm <= 1.2.1 always wrote the mirror block here, even where uv does not read it.
+uvm_get_legacy_uv_config_file() {
+    echo "${HOME}/.config/uv/uv.toml"
+}
+
+# Prints the legacy uv.toml path when it holds a managed mirror block that uv ignores.
+uvm_get_stale_mirror_config_file() {
+    local legacy_file
+    legacy_file=$(uvm_get_legacy_uv_config_file)
+
+    [ "$legacy_file" != "$(uvm_get_uv_config_file)" ] || return 1
+    uvm_file_contains_managed_block \
+        "$legacy_file" \
+        "$(uvm_get_mirror_start_marker)" \
+        "$(uvm_get_mirror_end_marker)" || return 1
+    echo "$legacy_file"
+}
+
+uvm_remove_stale_mirror_config() {
+    local stale_file
+    stale_file=$(uvm_get_stale_mirror_config_file) || return 0
+
+    uvm_remove_managed_block \
+        "$stale_file" \
+        "$(uvm_get_mirror_start_marker)" \
+        "$(uvm_get_mirror_end_marker)" || return 1
+    echo "Removed stale mirror block from ${stale_file}"
 }
 
 uvm_get_trusted_envs_file() {
@@ -757,7 +806,9 @@ EOF
         "$uv_config_file" \
         "$(uvm_get_mirror_start_marker)" \
         "$(uvm_get_mirror_end_marker)" \
-        "$mirror_block"
+        "$mirror_block" || return 1
+
+    uvm_remove_stale_mirror_config
 }
 
 uvm_trust_local_env() {

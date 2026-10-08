@@ -144,7 +144,8 @@ main() {
                             uvm_remove_managed_block \
                                 "$(uvm_get_uv_config_file)" \
                                 "$(uvm_get_mirror_start_marker)" \
-                                "$(uvm_get_mirror_end_marker)"
+                                "$(uvm_get_mirror_end_marker)" || return 1
+                            uvm_remove_stale_mirror_config || return 1
                             echo "Mirror configuration removed from $(uvm_get_uv_config_file)"
                             ;;
                         show)

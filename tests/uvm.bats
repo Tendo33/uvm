@@ -5,6 +5,7 @@ setup() {
     export HOME="$TEST_HOME"
     export UVM_HOME="${TEST_HOME}/custom-uvm-home"
     export UVM_ENVS_DIR="${TEST_HOME}/uv_envs"
+    unset XDG_CONFIG_HOME APPDATA UVM_PLATFORM_OVERRIDE
     export PATH="${BATS_TEST_DIRNAME}/../bin:$PATH"
 
     source "${BATS_TEST_DIRNAME}/../lib/uvm-config.sh"
@@ -725,4 +726,56 @@ EOF
     [ "$output" = "$(cd relative-env && pwd -P)" ]
 
     cd "$OLDPWD"
+}
+
+@test "uv config path follows uv's lookup rules" {
+    [ "$(uvm_get_uv_config_file)" = "${HOME}/.config/uv/uv.toml" ]
+
+    XDG_CONFIG_HOME="${TEST_HOME}/xdg/" run uvm_get_uv_config_file
+    [ "$output" = "${TEST_HOME}/xdg/uv/uv.toml" ]
+
+    XDG_CONFIG_HOME="relative/xdg" run uvm_get_uv_config_file
+    [ "$output" = "${HOME}/.config/uv/uv.toml" ]
+
+    UVM_PLATFORM_OVERRIDE="windows" APPDATA="${TEST_HOME}/AppData/Roaming" XDG_CONFIG_HOME="${TEST_HOME}/xdg" \
+        run uvm_get_uv_config_file
+    [ "$output" = "${TEST_HOME}/AppData/Roaming/uv/uv.toml" ]
+}
+
+@test "setup_uv_mirror writes where uv reads it when XDG_CONFIG_HOME is set" {
+    export XDG_CONFIG_HOME="${TEST_HOME}/xdg"
+    local uv_config_file="${XDG_CONFIG_HOME}/uv/uv.toml"
+
+    run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
+    [ "$status" -eq 0 ]
+    grep -q "pypi.tuna.tsinghua.edu.cn" "$uv_config_file"
+    [ ! -f "${HOME}/.config/uv/uv.toml" ]
+    uv --config-file "$uv_config_file" python list --only-installed >/dev/null
+}
+
+@test "setup_uv_mirror migrates a stale managed block out of the legacy path" {
+    local legacy_file="${HOME}/.config/uv/uv.toml"
+    mkdir -p "${HOME}/.config/uv"
+    cat > "$legacy_file" <<'EOF'
+cache-dir = "/tmp/keep-me"
+# >>> uvm mirror >>>
+[[index]]
+url = "https://old.example.com/simple"
+default = true
+# <<< uvm mirror <<<
+EOF
+    export XDG_CONFIG_HOME="${TEST_HOME}/xdg"
+
+    run uvm_doctor
+    [[ "$output" == *"Stale mirror block: ${legacy_file}"* ]]
+    [[ "$output" == *"UV config file    : ${XDG_CONFIG_HOME}/uv/uv.toml"* ]]
+
+    run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"
+    [ "$status" -eq 0 ]
+    grep -q "pypi.tuna.tsinghua.edu.cn" "${XDG_CONFIG_HOME}/uv/uv.toml"
+    ! grep -q "old.example.com" "$legacy_file"
+    grep -q 'cache-dir = "/tmp/keep-me"' "$legacy_file"
+
+    run uvm_doctor
+    [[ "$output" != *"Stale mirror block"* ]]
 }

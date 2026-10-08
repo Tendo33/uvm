@@ -103,8 +103,9 @@ CI 是发布工作流的必需依赖，覆盖：
 
 - ShellCheck 与 Bash 语法检查
 - Ubuntu、macOS 上的 BATS
-- 最低支持 uv 0.10.0 与当前验证 uv 0.12.2
-- Windows Git Bash 生命周期 smoke test
+- 最低支持 uv 0.10.0、当前验证 uv 0.12.23，以及 uv `latest`
+- 每周定时运行一次，及早发现新版 uv 带来的回归
+- macOS 与 Windows Git Bash 生命周期 smoke test（uv 0.12.23 与 `latest`），并验证镜像配置被 uv 实际读取
 - 版本、文档和已退役实现的一致性检查
 
 发布仅由 `v*` tag 触发。release workflow 先运行同一套 CI，再校验 tag、`bin/uvm`、`install.sh`、下载 ref 和 changelog 一致，最后才创建 GitHub Release。失败不得被当成已发布版本。

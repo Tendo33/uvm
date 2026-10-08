@@ -279,7 +279,7 @@ uvm config mirror remove
 ```
 
 - `config show`：输出当前生效的配置路径
-- `config mirror set`：验证并更新 `~/.config/uv/uv.toml` 中的受管 PyPI 包索引 block
+- `config mirror set`：验证并更新 uv 用户级 `uv.toml` 中的受管 PyPI 包索引 block（路径见下文「mirror 受管 block」）
 - 如果检测到会冲突的非 `uvm` 镜像配置，`uvm` 会给出警告并保持原文件不变
 
 ### `uvm shell-hook`
@@ -377,7 +377,14 @@ eval "$(uvm shell-hook)"
 
 ### mirror 受管 block
 
-`uvm config mirror set <url>` 只更新 `~/.config/uv/uv.toml` 中由 `uvm` 管理的 PyPI 包索引 block：
+`uvm config mirror set <url>` 只更新 uv 用户级 `uv.toml` 中由 `uvm` 管理的 PyPI 包索引 block，路径与 uv 自身的读取位置一致：
+
+- Linux / macOS：`XDG_CONFIG_HOME` 为绝对路径时用 `$XDG_CONFIG_HOME/uv/uv.toml`，否则用 `~/.config/uv/uv.toml`
+- Windows Git Bash：`%APPDATA%\uv\uv.toml`
+
+`uvm doctor` 会显示实际路径。uvm 1.2.1 及更早版本写到 `~/.config/uv/uv.toml`、但 uv 实际不读取的受管 block，会被 `uvm doctor` 报告，并在下一次 `config mirror set` 或 `config mirror remove` 时清理。
+
+
 
 ```toml
 # >>> uvm mirror >>>
@@ -475,7 +482,7 @@ bash uninstall.sh --keep-shell-config
 
 - 你的虚拟环境目录
 - `uv`
-- `~/.config/uv/uv.toml`
+- uv 的 `uv.toml`
 
 如果你安装时使用了自定义 `UVM_HOME`，卸载时请带上同样的值：
 

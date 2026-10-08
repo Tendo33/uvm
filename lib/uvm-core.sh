@@ -586,7 +586,7 @@ uvm_self_update() {
     local install_url
 
     if [ "$channel" != "latest" ] && [[ ! "$channel" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
-        echo "Error: Update target must be 'latest' or a version tag such as v1.2.1"
+        echo "Error: Update target must be 'latest' or a version tag such as v1.2.2"
         return 1
     fi
 

@@ -7,7 +7,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [1.2.2] — 2026-10-08
 
 ### Changed
 - CI now tests uv 0.10.0, 0.12.23, and `latest`, and runs weekly to catch regressions from new uv releases
@@ -177,7 +177,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-[Unreleased]: https://github.com/Tendo33/uvm/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/Tendo33/uvm/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/Tendo33/uvm/releases/tag/v1.2.2
 [1.2.1]: https://github.com/Tendo33/uvm/releases/tag/v1.2.1
 [1.2.0]: https://github.com/Tendo33/uvm/releases/tag/v1.2.0
 [1.1.1]: https://github.com/Tendo33/uvm/releases/tag/v1.1.1

@@ -790,7 +790,7 @@ EOF
     export XDG_CONFIG_HOME="${TEST_HOME}/xdg"
 
     run uvm_doctor
-    [[ "$output" == *"Stale mirror block: ${legacy_file}"* ]]
+    [[ "$output" == *"Stale mirror"*"${legacy_file}"* ]]
     [[ "$output" == *"UV config file    : ${XDG_CONFIG_HOME}/uv/uv.toml"* ]]
 
     run setup_uv_mirror "https://pypi.tuna.tsinghua.edu.cn/simple"

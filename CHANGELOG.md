@@ -7,7 +7,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.3.2] — 2026-11-17
+## [1.3.3] — 2026-11-17
 
 ### Fixed
 - ShellCheck SC2119: `uvm_status` in dispatcher now passes `"$@"`

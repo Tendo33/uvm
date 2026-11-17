@@ -616,6 +616,8 @@ uvm_self_update() {
     local channel="latest"
     local target_given=false
     local check_only=false
+    local update_uvm=true
+    local update_uv=true
     local install_url
     local current_version="${UVM_VERSION#v}"
 
@@ -624,14 +626,21 @@ uvm_self_update() {
             --check)
                 check_only=true
                 ;;
+            --no-uv)
+                update_uv=false
+                ;;
+            --uv)
+                update_uvm=false
+                update_uv=true
+                ;;
             -*)
                 echo "Error: Unknown option: $1"
-                echo "Usage: uvm update [--check] [v<version>]"
+                echo "Usage: uvm update [--check] [--no-uv] [--uv] [v<version>]"
                 return 1
                 ;;
             *)
                 if [ "$target_given" = true ]; then
-                    echo "Error: Usage: uvm update [--check] [v<version>]"
+                    echo "Error: Usage: uvm update [--check] [--no-uv] [v<version>]"
                     return 1
                 fi
                 channel="$1"
@@ -651,73 +660,97 @@ uvm_self_update() {
         return 1
     fi
 
-    if [ "$channel" = "latest" ]; then
-        install_url="https://github.com/Tendo33/uvm/releases/latest/download/install.sh"
-    else
-        install_url="https://raw.githubusercontent.com/Tendo33/uvm/${channel}/install.sh"
+    # ── Helper: fetch a URL to stdout ──────────────────────────────────────
+    _uvm_fetch() {
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$1"
+        else
+            wget -qO- "$1"
+        fi
+    }
+    _uvm_fetch_to() {
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$1" -o "$2"
+        else
+            wget -qO "$2" "$1"
+        fi
+    }
+
+    # ── uv version lookup ──────────────────────────────────────────────────
+    _uvm_get_latest_uv_version() {
+        local response
+        response=$(_uvm_fetch "https://api.github.com/repos/astral-sh/uv/releases/latest" 2>/dev/null) || return 1
+        printf '%s' "$response" | grep '"tag_name"' \
+            | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | head -n 1
+    }
+
+    # ── --check mode ───────────────────────────────────────────────────────
+    if [ "$check_only" = true ]; then
+        local overall_status=0
+
+        if [ "$update_uvm" = true ]; then
+            local available_uvm=""
+            if [ "$channel" = "latest" ]; then
+                local api_resp
+                api_resp=$(_uvm_fetch "https://api.github.com/repos/Tendo33/uvm/releases/latest" 2>/dev/null) || {
+                    echo "Error: Failed to reach GitHub API for uvm"
+                    return 1
+                }
+                available_uvm=$(printf '%s' "$api_resp" \
+                    | grep '"tag_name"' \
+                    | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/' | head -n 1)
+            else
+                local tmp_check
+                tmp_check=$(mktemp "${TMPDIR:-/tmp}/uvm-check.XXXXXX.sh") || return 1
+                _uvm_fetch_to "https://raw.githubusercontent.com/Tendo33/uvm/${channel}/install.sh" "$tmp_check" 2>/dev/null || {
+                    rm -f "$tmp_check"; echo "Error: Version '${channel}' not found"; return 1
+                }
+                available_uvm=$(sed -n 's/^UVM_INSTALL_VERSION="\([^"]*\)"/\1/p' "$tmp_check" | head -n 1)
+                rm -f "$tmp_check"
+            fi
+            echo "uvm  installed : ${current_version:-unknown}"
+            echo "uvm  available : ${available_uvm:-unknown}"
+            if [ "$available_uvm" = "$current_version" ]; then
+                echo "uvm  status    : up to date"
+            elif [ -z "$current_version" ] || uvm_version_is_at_least "$available_uvm" "$current_version"; then
+                echo "uvm  status    : update available — run: uvm update"
+            else
+                echo "uvm  status    : available release is older"
+            fi
+        fi
+
+        if [ "$update_uv" = true ] && command -v uv >/dev/null 2>&1; then
+            local current_uv available_uv
+            current_uv=$(uv --version 2>/dev/null | awk '{print $2}')
+            available_uv=$(_uvm_get_latest_uv_version 2>/dev/null)
+            echo "uv   installed : ${current_uv:-unknown}"
+            echo "uv   available : ${available_uv:-unknown}"
+            if [ -n "$available_uv" ] && [ "$available_uv" = "$current_uv" ]; then
+                echo "uv   status    : up to date"
+            elif [ -n "$available_uv" ]; then
+                echo "uv   status    : update available — run: uvm update"
+            fi
+        fi
+
+        return 0
     fi
 
-    if [ "$check_only" = true ]; then
-        # For latest channel use the GitHub releases API — much lighter than
-        # downloading the full installer just to read one version string.
-        local downloaded_version
-        if [ "$channel" = "latest" ]; then
-            local api_url="https://api.github.com/repos/Tendo33/uvm/releases/latest"
-            local api_response
-            if command -v curl >/dev/null 2>&1; then
-                api_response=$(curl -fsSL "$api_url" 2>/dev/null) || {
-                    echo "Error: Failed to reach GitHub API"
-                    return 1
-                }
-            else
-                api_response=$(wget -qO- "$api_url" 2>/dev/null) || {
-                    echo "Error: Failed to reach GitHub API"
-                    return 1
-                }
-            fi
-            downloaded_version=$(printf '%s' "$api_response" \
-                | grep '"tag_name"' \
-                | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/')
-            if [ -z "$downloaded_version" ]; then
-                echo "Error: Could not parse version from GitHub API response"
-                return 1
-            fi
-        else
-            # Specific version target: download installer to confirm it exists.
-            local tmp_install
-            tmp_install=$(mktemp "${TMPDIR:-/tmp}/uvm-check.XXXXXX.sh") || return 1
-            local check_url="https://raw.githubusercontent.com/Tendo33/uvm/${channel}/install.sh"
-            if command -v curl >/dev/null 2>&1; then
-                curl -fsSL "$check_url" -o "$tmp_install" 2>/dev/null || {
-                    rm -f "$tmp_install"
-                    echo "Error: Version '${channel}' not found"
-                    return 1
-                }
-            else
-                wget -qO "$tmp_install" "$check_url" 2>/dev/null || {
-                    rm -f "$tmp_install"
-                    echo "Error: Version '${channel}' not found"
-                    return 1
-                }
-            fi
-            downloaded_version=$(sed -n 's/^UVM_INSTALL_VERSION="\([^"]*\)"/\1/p' "$tmp_install" | head -n 1)
-            rm -f "$tmp_install"
-            if [ -z "$downloaded_version" ]; then
-                echo "Error: Could not parse version from installer"
-                return 1
-            fi
-        fi
+    # ── Actual update ──────────────────────────────────────────────────────
+    local overall_status=0
 
-        echo "Installed : ${current_version:-unknown}"
-        echo "Available : ${downloaded_version}"
-        if [ "$downloaded_version" = "$current_version" ]; then
-            echo "uvm is up to date"
-        elif [ -z "$current_version" ] || uvm_version_is_at_least "$downloaded_version" "$current_version"; then
-            echo "Update available. Run: uvm update"
-        else
-            echo "The available release is older than the installed version"
-        fi
-        return 0
+    if [ "$update_uv" = true ] && command -v uv >/dev/null 2>&1; then
+        echo "Updating uv..."
+        uv self update 2>&1 || {
+            echo "Warning: uv self update failed; continuing with uvm update"
+        }
+        echo ""
+    elif [ "$update_uv" = true ] && ! command -v uv >/dev/null 2>&1; then
+        echo "uv not found — skipping uv update"
+        echo ""
+    fi
+
+    if [ "$update_uvm" = false ]; then
+        return "$overall_status"
     fi
 
     if [ "$channel" = "latest" ]; then
@@ -730,19 +763,11 @@ uvm_self_update() {
     local tmp_install
     tmp_install=$(mktemp "${TMPDIR:-/tmp}/uvm-update.XXXXXX.sh") || return 1
 
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$install_url" -o "$tmp_install" || {
-            rm -f "$tmp_install"
-            echo "Error: Failed to download installer"
-            return 1
-        }
-    else
-        wget -qO "$tmp_install" "$install_url" || {
-            rm -f "$tmp_install"
-            echo "Error: Failed to download installer"
-            return 1
-        }
-    fi
+    _uvm_fetch_to "$install_url" "$tmp_install" || {
+        rm -f "$tmp_install"
+        echo "Error: Failed to download installer"
+        return 1
+    }
 
     local downloaded_version
     downloaded_version=$(sed -n 's/^UVM_INSTALL_VERSION="\([^"]*\)"/\1/p' "$tmp_install" | head -n 1)
@@ -755,19 +780,6 @@ uvm_self_update() {
         rm -f "$tmp_install"
         echo "Error: Downloaded installer declares an invalid version"
         return 1
-    fi
-    if [ "$check_only" = true ]; then
-        rm -f "$tmp_install"
-        echo "Installed: ${current_version:-unknown}"
-        echo "Available: ${downloaded_version}"
-        if [ "$downloaded_version" = "$current_version" ]; then
-            echo "uvm is up to date"
-        elif [ -z "$current_version" ] || uvm_version_is_at_least "$downloaded_version" "$current_version"; then
-            echo "Update available. Run: uvm update"
-        else
-            echo "The available release is older than the installed version"
-        fi
-        return 0
     fi
 
     if [ -n "$current_version" ] && ! uvm_version_is_at_least "$downloaded_version" "$current_version"; then
@@ -784,7 +796,6 @@ uvm_self_update() {
     fi
 
     local -a installer_args=(-y --envs-dir "$(uvm_get_default_envs_dir)")
-    # Respect users who installed without auto-activation.
     if ! uvm_is_shell_hook_configured "$(get_shell_rc_file)"; then
         installer_args+=(--no-shell-hook)
     fi
@@ -1416,8 +1427,10 @@ COMMANDS:
     repair                     Rebuild metadata and shell hook
     doctor                     Diagnose shell integration and metadata health
     status                     Show the active environment and key config at a glance
-    update [v<version>]        Update uvm to the latest (or given) release
-        --check                Only report whether an update is available
+    update [v<version>]        Update uvm and uv to the latest (or given) release
+        --check                Report installed vs. available versions without installing
+        --no-uv                Update uvm only, skip uv
+        --uv                   Update uv only, skip uvm
     trust [path]               Trust a local .venv for auto-activation
     trust list                 List trusted local environments
     untrust [path]             Revoke local .venv auto-activation trust

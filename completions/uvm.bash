@@ -108,7 +108,7 @@ _uvm_completions() {
             ;;
         update)
             # shellcheck disable=SC2207
-            COMPREPLY=($(compgen -W "--check" -- "$cur"))
+            COMPREPLY=($(compgen -W "--check --no-uv --uv" -- "$cur"))
             ;;
         run)
             if [ "${COMP_CWORD}" -eq 2 ]; then

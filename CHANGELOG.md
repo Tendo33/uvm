@@ -7,6 +7,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.1] — 2026-11-17
+
+### Changed
+- `uvm update` now also updates `uv` by default via `uv self update`; pass `--no-uv` to skip
+- `uvm update --uv` updates only `uv` without touching `uvm`
+- `uvm update --check` now reports both `uvm` and `uv` version status side by side
+- Bash and Zsh completions updated to offer `--no-uv` and `--uv` flags for `uvm update`
+
+---
+
 ## [1.3.0] — 2026-11-17
 
 ### Added

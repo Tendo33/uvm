@@ -817,21 +817,30 @@ EOF
     # Fake curl handles two shapes:
     #   curl -fsSL <url> -o <dest>   → copy fake installer (update/download path)
     #   curl -fsSL <url>             → emit fake GitHub API JSON (--check path)
+    # For uv API requests, echo back the locally installed uv version so the
+    # uv section reports "up to date" and does not affect the exit status.
     cat > "${fake_bin}/curl" <<EOF
 #!/bin/bash
 dest=""
+url=""
 while [ "\$#" -gt 0 ]; do
-    if [ "\$1" = "-o" ]; then
-        dest="\$2"
-        shift 2
-    else
-        shift
-    fi
+    case "\$1" in
+        -o) dest="\$2"; shift 2 ;;
+        *) url="\$1"; shift ;;
+    esac
 done
 if [ -n "\$dest" ]; then
     cp "\$UVM_FAKE_INSTALLER" "\$dest"
 else
-    printf '{"tag_name":"v${version}","name":"uvm v${version}"}\n'
+    case "\$url" in
+        *astral-sh/uv*)
+            uv_ver=\$(command uv --version 2>/dev/null | awk '{print \$2}')
+            printf '{"tag_name":"%s"}\n' "\${uv_ver:-0.0.0}"
+            ;;
+        *)
+            printf '{"tag_name":"v${version}","name":"uvm v${version}"}\n'
+            ;;
+    esac
 fi
 exit 0
 EOF
@@ -862,9 +871,9 @@ EOF
     run uvm_self_update --check
 
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Installed: 1.2.3"* ]]
-    [[ "$output" == *"Available: 1.3.0"* ]]
-    [[ "$output" == *"Update available"* ]]
+    [[ "$output" == *"uvm  installed : 1.2.3"* ]]
+    [[ "$output" == *"uvm  available : 1.3.0"* ]]
+    [[ "$output" == *"uvm  status    : update available"* ]]
     [ ! -f "$UVM_UPDATE_MARKER" ]
 
     run uvm_self_update --bogus

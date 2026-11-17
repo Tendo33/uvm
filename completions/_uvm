@@ -115,7 +115,10 @@ _uvm() {
                     fi
                     ;;
                 update)
-                    _arguments '--check[Only report whether an update is available]'
+                    _arguments \
+                        '--check[Report versions without installing]' \
+                        '--no-uv[Update uvm only, skip uv]' \
+                        '--uv[Update uv only, skip uvm]'
                     ;;
                 scan)
                     _files -/

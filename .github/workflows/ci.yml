@@ -78,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         uv-version: ["0.12.23", "latest"]
     defaults:
       run:
@@ -155,13 +155,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Validate 1.2.3 declarations and retired paths
+      - name: Validate version declarations and retired paths
         run: |
-          grep -q 'UVM_VERSION="1.2.3"' bin/uvm
-          grep -q 'UVM_INSTALL_VERSION="1.2.3"' install.sh
-          grep -q '^## \[1.2.3\]' CHANGELOG.md
-          grep -q '1.2.3' README.md
-          grep -q '1.2.3' README_CN.md
+          # Extract the declared version from the source of truth (bin/uvm)
+          BIN_VERSION=$(sed -n 's/^UVM_VERSION="\([^"]*\)"/\1/p' bin/uvm)
+          INSTALL_VERSION=$(sed -n 's/^UVM_INSTALL_VERSION="\([^"]*\)"/\1/p' install.sh)
+          test -n "$BIN_VERSION"
+          test "$BIN_VERSION" = "$INSTALL_VERSION"
+          grep -q "^## \[${BIN_VERSION}\]" CHANGELOG.md
+          grep -q "${BIN_VERSION}" README.md
+          grep -q "${BIN_VERSION}" README_CN.md
           if grep -R -n '\[python-downloads\]' \
               README.md README_CN.md EXAMPLES.md project_document lib; then
             echo "Retired invalid [python-downloads] table is still documented or emitted"

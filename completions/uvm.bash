@@ -17,7 +17,7 @@ _uvm_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     cmd="${COMP_WORDS[1]}"
 
-    local commands="create activate deactivate delete list scan init doctor repair config run rename clone export import update trust untrust shell-hook help version"
+    local commands="create activate deactivate delete list scan init doctor repair status config run rename clone export import update trust untrust shell-hook help version"
 
     if [ "${COMP_CWORD}" -eq 1 ]; then
         # shellcheck disable=SC2207

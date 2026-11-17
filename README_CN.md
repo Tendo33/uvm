@@ -1,102 +1,100 @@
-# uvm - UV 环境管理器
+# uvm — UV 环境管理器（1.3.0）
 
 <div align="center">
 
-**一个以 Bash 为核心、类 Conda 体验的 `uv` 环境管理工具**
+**为 `uv` 加上命名、共享环境层 —— 不用 conda 也能有 conda 的工作流**
 
 [English Docs](README.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Shell](https://img.shields.io/badge/Shell-Bash-green.svg)](https://www.gnu.org/software/bash/)
+[![Shell](https://img.shields.io/badge/Shell-Bash%20%7C%20Zsh-green.svg)](https://www.gnu.org/software/bash/)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows%20Git%20Bash-blue.svg)](https://github.com/Tendo33/uvm)
+[![CI](https://github.com/Tendo33/uvm/actions/workflows/ci.yml/badge.svg)](https://github.com/Tendo33/uvm/actions/workflows/ci.yml)
 
 </div>
 
-`uvm` 保留熟悉的 `create / activate / deactivate / list / delete` 工作流，同时把 Python、虚拟环境和包操作交给 `uv`。`1.2.3` 让 `uvm update` 可以放心使用（不再出现更新成功却报错的情况），新增 `uvm config set envs-dir` 和 Python 下载镜像配置，配置文件改为只解析、不执行。1.2.2 让镜像配置写到 uv 实际读取的位置，并让 CI 持续跟进最新版 uv；同时保留 1.2.1 的发布加固：本地环境显式信任、真实 `uv pip` 包迁移、合法镜像配置、稳定 rename 语义，以及真实环境集成测试。
+`uv` 很快，但它没有"按名字从任意目录激活一个共享环境"的概念。`uvm` 补上这一层 —— `create`、`activate`、`deactivate`、`list`、`delete` —— 同时把所有 Python、虚拟环境和包操作都交给 `uv`。你保留速度，获得工作流。
 
-## 功能概览
+## 为什么用 uvm？
 
-- 类 Conda 命令体验，保持 Bash 小而稳的实现方式
-- 支持默认共享环境目录，也支持 `--path` 自定义路径环境并纳入管理
-- 本地 `.venv` 需显式信任后自动激活，受管 `.uvmrc` 支持向上查找
-- 元数据改为 `envs.d/` 单文件记录，不再依赖脆弱的字符串拼接 JSON
-- shell 配置与镜像配置通过起止标记进行幂等更新
-- 新增诊断与修复命令：`uvm doctor`、`uvm repair`
-- 支持 Linux、macOS、Windows Git Bash
+| 任务 | 不用 uvm | 用 uvm |
+|------|----------|--------|
+| 创建命名环境 | `uv venv ~/uv_envs/myenv --python 3.11` | `uvm create myenv --python 3.11` |
+| 按名字激活 | `source ~/uv_envs/myenv/bin/activate` | `uvm activate myenv` |
+| 按项目自动激活 | 手动 | `.uvmrc` 或受信任的 `.venv` |
+| 列出所有环境 | `ls ~/uv_envs` | `uvm list` |
+| 跨机器迁移环境 | 手动 | `uvm export` / `uvm import` |
+
+uvm 不替换 `uv`。它是一层很薄的 shell 封装（约 1200 行 Bash），管理环境元数据并提供 `uv` 刻意省略的激活机制。
+
+## 快速开始
+
+```bash
+# 1. 安装
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash -s -- -y
+source ~/.zshrc          # 或 ~/.bashrc
+
+# 2. 创建并激活
+uvm create myenv --python 3.11
+uvm activate myenv
+
+# 3. 使用
+python -m pip install requests
+python my_script.py
+
+# 4. 完成
+uvm deactivate
+```
 
 ## 运行要求
 
-- Bash 或 Zsh
-- 已安装 `uv`
-- Linux、macOS，或 Windows + Git Bash
+- Bash ≥ 3.2 或 Zsh
+- [`uv`](https://docs.astral.sh/uv/)（安装器可在 Linux/macOS 上帮你装）
+- Linux、macOS 或 Windows Git Bash
 
-说明：
-
-- 当前版本不支持 PowerShell / CMD。
-- Windows 用户请先在 PowerShell 中安装 `uv`，再在 Git Bash 中使用 `uvm`。
+不支持 PowerShell 和 CMD。
 
 ## 安装
 
-### 推荐方式：先下载，再执行
-
-交互式安装需要真实脚本文件，因此推荐先下载 `install.sh`，不要直接把远程脚本管道给 `bash`。
-
-Linux / macOS：
+### 交互式（首次安装推荐）
 
 ```bash
+# Linux / macOS
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh -o install.sh
 bash install.sh
 rm install.sh
-```
 
-Windows（Git Bash）：
-
-```bash
+# Windows（Git Bash）—— 先在 PowerShell 里装 uv
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh -o install.sh
 bash install.sh
 rm install.sh
 ```
 
-安装器会：
+安装向导会询问环境目录、是否安装 `uv`、是否启用自动激活。
 
-- 把 `uvm` 安装到 `~/.local/bin/uvm`
-- 把库文件安装到 `~/.local/lib/uvm`
-- 初始化 `UVM_HOME`，有效位置为 `${UVM_HOME:-~/.config/uvm}`
-- 初始化 `UVM_ENVS_DIR`，默认位置为 `~/uv_envs`
-- 扫描默认环境目录并注册已有环境
-- 通过受管 block 写入 PATH 与 shell hook，而不是粗暴追加零散行
-- 可选地通过验证后的受管 block 更新 `uv` PyPI 包索引
-- 如果 `install.sh` 来自某个 release tag，远程下载的 `bin/`、`lib/`、`completions/` 默认也会固定到同一个 tag
-
-### 非交互安装
+### 非交互式（CI / 脚本）
 
 ```bash
-bash install.sh -y
+# 直接 pipe，无需临时文件
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash -s -- -y
+
+# 指定环境目录
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash -s -- -y --envs-dir /path/to/envs
+
+# 配置 PyPI 镜像（国内推荐）
+curl -fsSL https://raw.githubusercontent.com/Tendo33/uvm/main/install.sh | bash -s -- -y \
+  --mirror https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-注意：
+非交互模式下，缺少 `uv` 是硬错误。镜像配置默认跳过，需显式用 `--mirror` 开启。
 
-- 非交互模式下，如果系统没有 `uv`，安装会直接失败。
-- 这个模式适合 CI、自动化脚本和重复部署场景。
-- 非交互重装/升级会保留既有 `UVM_HOME` 与 `UVM_ENVS_DIR`。
+安装器会把 `uvm` 放到 `~/.local/bin`，库文件放到 `~/.local/lib/uvm`，配置放到 `~/.config/uvm`，并在 shell RC 文件里写入受管 PATH 和 shell hook 块，重装和卸载都是幂等的。
 
-### 自定义受管环境目录
+### 自定义环境目录
 
 ```bash
 bash install.sh --envs-dir /path/to/envs
-```
-
-该目录会被写入 `UVM_HOME/config`，并在 `uvm config show` 中体现为当前有效配置。
-
-### 高级用法：覆盖远程下载 ref
-
-当你下载的是某个 release 对应的 `install.sh` 时，安装器默认会从匹配的 `v<version>` ref 下载 `bin/`、`lib/` 和 `completions/`。
-
-如果你明确想安装别的 ref，可以显式覆盖：
-
-```bash
-UVM_DOWNLOAD_REF=main bash install.sh -y
 ```
 
 ### 本地开发安装
@@ -107,20 +105,37 @@ cd uvm
 bash install.sh
 ```
 
-## 快速开始
+### 升级
 
 ```bash
-uvm create myenv --python 3.11
-source ~/.bashrc   # 或 ~/.zshrc
-uvm activate myenv
-uvm list
-uvm deactivate
-uvm delete myenv
+uvm update           # 最新版
+uvm update --check   # 检查版本，不安装（使用 GitHub API）
+uvm update v1.2.3    # 指定版本
 ```
 
-## 命令说明
+更新后重启 shell：`exec "$SHELL"`
 
-### `uvm create`
+---
+
+## 常用命令
+
+这几个命令覆盖 90% 的日常使用：
+
+```bash
+uvm create myenv --python 3.11   # 创建命名环境
+uvm activate myenv               # 激活（需要 shell 集成）
+uvm deactivate                   # 退出当前环境
+uvm list                         # 列出所有环境
+uvm status                       # 显示活跃环境和配置概览
+uvm delete myenv                 # 删除环境
+uvm run myenv python -V          # 不激活，直接在环境里运行命令
+```
+
+---
+
+## 完整命令参考
+
+### create
 
 ```bash
 uvm create myenv
@@ -128,264 +143,183 @@ uvm create myenv --python 3.12
 uvm create myenv --path /work/envs/myenv
 ```
 
-行为说明：
+在写文件系统之前先验证名称。`--path` 环境会被元数据追踪，出现在 `uvm list` 里。
 
-- 在真正写入文件系统前会先校验环境名
-- `--path` 允许把环境建到自定义位置
-- 使用 `--path` 创建的环境仍会写入元数据，因此 `uvm list` / `uvm activate` / `uvm delete` 都能正确识别
-
-### `uvm activate`
+### activate / deactivate
 
 ```bash
 uvm activate myenv
-```
-
-`activate` 必须运行在 shell 集成环境中，因为它需要把目标环境 `source` 到当前 shell 会话。
-
-如果提示需要 shell integration，请确认 shell rc 中存在：
-
-```bash
-eval "$(uvm shell-hook)"
-```
-
-安装器与 `uvm repair` 都可以自动修复这段受管 block。
-
-### `uvm deactivate`
-
-```bash
 uvm deactivate
 ```
 
-和 `activate` 一样，它依赖 shell 集成。
+需要 shell 集成（`eval "$(uvm shell-hook)"` 写入 RC 文件 —— 安装器自动完成）。
 
-### `uvm list`
+### list
 
 ```bash
 uvm list
-uvm list --all
+uvm list --all    # 显示来源列（managed / discovered）
+uvm list --json   # 机器可读 JSON 数组
 ```
 
-行为说明：
+活跃环境用绿色 `*` 标记。
 
-- 优先列出 `envs.d/` 中的受管记录
-- 同时补充扫描默认 `UVM_ENVS_DIR` 下可识别的有效环境
-- 当前活动环境前会显示 `*`
-- `--all` 会额外显示来源列，区分 `managed` 与 `discovered`
+### status
 
-### `uvm delete`
+```bash
+uvm status           # 活跃环境、环境目录、记录数
+uvm status --json    # {"active_env":"myenv","active_path":"...","envs_dir":"...","records":3}
+```
+
+### delete
 
 ```bash
 uvm delete myenv
-uvm delete myenv --force
+uvm delete myenv --force   # 跳过确认
 ```
 
-安全规则：
+拒绝删除活跃环境。同时清理该路径的 trust 记录，避免同路径新建的 venv 被静默信任。
 
-- 拒绝非法环境名
-- 拒绝删除当前正处于激活状态的环境
-- 拒绝删除非受管或越界路径
-- 删除环境目录后会同步删除对应元数据记录
-
-### `uvm run`、`rename`、`clone`、`export`、`import`
+### run
 
 ```bash
-uvm run myenv python -V
-uvm rename myenv renamed
-uvm clone renamed copied
-uvm export renamed > requirements.txt
+uvm run myenv python my_script.py
+uvm run myenv pytest tests/
+```
+
+在环境内运行命令，不修改调用方的 shell。
+
+### rename
+
+```bash
+uvm rename myenv myenv-v2
+```
+
+只改管理名称，不移动目录。如果当前目录树里有 `.uvmrc` 还引用旧名，会给出警告。
+
+### clone
+
+```bash
+uvm clone myenv myenv-copy
+```
+
+复制源环境并通过 `uv pip` 迁移包。
+
+### export / import
+
+```bash
+uvm export myenv > requirements.txt
 uvm import restored --from requirements.txt
 ```
 
-- `rename` 只修改受管名称，不移动普通不可重定位的 venv。
-- `clone`、`export`、`import` 使用 `uv pip --python`，不要求环境预装 pip。
-- 包迁移失败会返回失败并安全清理新建的受管目标，不再吞错后报告成功。
+使用 `uv pip freeze` 和 `uv pip install`，不需要 seeded pip。
 
-### `uvm trust` 与 `uvm untrust`
+### trust / untrust
 
 ```bash
-cd ~/project
-uvm trust
-uvm trust list
-uvm untrust
+uvm trust            # 信任 ./.venv（先检查激活脚本内容）
+uvm trust /path      # 信任指定路径
+uvm trust list       # 列出已信任路径
+uvm untrust          # 撤销 ./.venv 的信任
 ```
 
-本地 `.venv/bin/activate` 是可执行 shell 代码，因此未显式信任的本地环境只会被检测，不会被自动 `source`。受管 `.uvmrc` 环境不需要这一步本地路径授权。
+本地 `.venv` 的激活脚本是可执行 shell 代码，uvm 在你显式信任其规范路径之前不会自动 source 它。受管 `.uvmrc` 环境不需要这一步。
 
-### `uvm update`
+### update
 
 ```bash
-uvm update            # 更新到最新 release
-uvm update --check    # 只查看当前版本和最新版本，不安装
-uvm update v1.2.3     # 指定版本；也可用来重装当前版本
+uvm update            # 最新版
+uvm update --check    # 对比已安装版本和可用版本（GitHub API，不下载安装器）
+uvm update v1.2.3     # 指定版本
 ```
 
-`uvm update` 从 GitHub Latest Release 更新，拒绝降级并保留当前环境目录。已经是最新版时只会提示，不会重装。安装时没开自动激活的，更新后依然保持关闭。更新完成后请重开终端（`exec "$SHELL"`），让当前会话加载新版本。
+拒绝降级。保留 `UVM_HOME`、`UVM_ENVS_DIR` 和自动激活偏好。
 
-从 1.2.0 之前的版本升级（`uvm version` 显示 1.0.x 或 1.1.x，执行 `uvm update` 提示 `Unknown command`）：需要先手动重装一次，之后就可以直接用 `uvm update`。已有环境和环境目录配置都会保留。
-
-```bash
-curl -fsSL https://github.com/Tendo33/uvm/releases/latest/download/install.sh -o install.sh
-bash install.sh -y
-rm install.sh
-exec "$SHELL"
-```
-
-旧版安装器会在 shell rc 文件里直接追加一行 `eval "$(uvm shell-hook)"`。新版安装器会写入带 `# >>> uvm shell >>>` 标记的受管 block，请删掉那行旧的，避免 hook 加载两次。
-
-### `uvm scan`
-
-```bash
-uvm scan
-uvm scan /path/to/envs
-```
-
-扫描指定目录并注册其中的有效环境。
-
-### `uvm init`
-
-```bash
-uvm init
-```
-
-初始化 `UVM_HOME` 和默认环境目录并扫描已有环境；镜像配置保持显式 opt-in。
-
-### `uvm doctor`
+### doctor
 
 ```bash
 uvm doctor
 ```
 
-输出内容包括：
+分组显示安装健康状态、shell hook 状态、活跃环境、镜像配置、待处理的 trust 警告，带颜色。出问题先跑这个。
 
-- 当前平台与 shell 类型
-- 实际使用的 shell rc 文件
-- shell hook 是否已配置
-- `UVM_HOME`
-- `UVM_ENVS_DIR`
-- 元数据记录数量
-- `~/.local/bin` 是否在 `PATH`
-- 当前检测到的 `uv` 版本
-- mirror block 是否存在
-- 当前活动环境
-- 当前环境是否来自自动激活
-
-当 `activate`、自动激活、PATH 或元数据状态异常时，优先先跑这个命令。
-
-### `uvm repair`
+### repair
 
 ```bash
 uvm repair
 ```
 
-它会做安全的、可恢复的修复：
+清除无效元数据记录，重新扫描默认环境目录，重写受管 shell hook 块。不会自动删除有效环境。
 
-- 清理无效元数据记录
-- 重新扫描默认 `UVM_ENVS_DIR`
-- 重写 shell hook 受管 block
-- 保留既有镜像 block，不猜测或重写未知 URL
-
-它不会自动删除有效环境。
-
-### `uvm config`
+### config
 
 ```bash
-uvm config show                          # 查看全部生效配置，包括两种镜像
+uvm config show
 uvm config get envs-dir
-uvm config set envs-dir ~/my-envs        # 新环境的存放目录
+uvm config set envs-dir ~/my-envs
+
 uvm config mirror set https://pypi.tuna.tsinghua.edu.cn/simple
 uvm config mirror show
 uvm config mirror remove
+
 uvm config python-mirror set https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone
 uvm config python-mirror show
 uvm config python-mirror remove
 ```
 
-- `config set envs-dir`：创建目录、保存配置，并登记目录里已有的环境。原来在别处的环境不会移动，也仍然保持登记。
-- `config mirror`：管理 PyPI 包索引（`[[index]]`），影响 `pip install` 从哪里下载包。
-- `config python-mirror`：管理 `python-install-mirror`，影响 uv 从哪里下载 Python 解释器（例如本机没有 3.12 时执行 `uvm create --python 3.12`）。国内用户这一步往往最慢。
-- 两者都写入 uv 的用户级 `uv.toml`（路径见下文「mirror 受管 block」）。如果文件里已有同类的非 `uvm` 配置，`uvm` 会保持原文件不变。
+`config mirror` 管理 `uv pip install` 使用的 PyPI 包索引。`config python-mirror` 管理 uv 下载 Python 解释器时使用的 URL。两者都写到 uv 的用户级 `uv.toml`。如果该类型的配置已有未受管的设置，uvm 不会修改文件。
 
-### `uvm shell-hook`
+---
+
+## 自动激活
+
+在 shell RC 里加入（安装器自动完成）：
 
 ```bash
 eval "$(uvm shell-hook)"
 ```
 
-这个命令会生成当前 shell 所需的运行时代码，用于：
+启用后，每次切换目录，uvm 会按以下优先级查找激活目标：
 
-- `uvm activate`
-- `uvm deactivate`
-- 基于 prompt / `chpwd` 的自动激活检查
-
-当前版本不再通过覆写 `cd` 来做自动激活，而是改成 hook 机制。
-
-## 自动激活
-
-`uvm` 会从当前目录开始向上查找激活目标。
-
-优先级如下：
-
-1. 最近且已显式信任的父级 `.venv`
+1. 最近的已信任父级 `.venv`
 2. 最近的父级 `.uvmrc`
 
-这意味着：
+离开项目目录树时，自动激活的环境会自动退出。
 
-- 进入项目子目录时，不会因为离开项目根目录就丢失环境
-- 离开整个项目树后，会自动失活由自动激活带起的环境
-- 如果同一范围内同时存在 `.venv` 和 `.uvmrc`，优先使用 `.venv`
-
-### 本地 `.venv`
+### 自动激活本地 .venv
 
 ```bash
 cd ~/project
-uv venv
-uvm trust
-cd ~/project/src/module
+uv venv                # 用 uv 创建 .venv
+uvm trust              # 显式信任（先看一眼激活脚本）
+cd ~/project/src       # 自动激活
 ```
 
-信任后，进入 `src/module` 这样的子目录时也会自动激活；未信任时可用 `uvm doctor` 查看待授权路径。
-
-### 共享环境 `.uvmrc`
+### 自动激活共享命名环境
 
 ```bash
 uvm create shared-311 --python 3.11
-echo "shared-311" > .uvmrc
+echo "shared-311" > ~/project/.uvmrc
+cd ~/project/src       # 自动激活 shared-311
 ```
 
-项目子目录会继承最近父目录中的 `.uvmrc` 绑定。
+---
 
-## 配置与元数据模型
+## 配置说明
 
-### 生效路径
+| 项目 | 默认值 | 修改方式 |
+|------|--------|----------|
+| `UVM_HOME` | `~/.config/uvm` | 安装前 export |
+| `UVM_ENVS_DIR` | `~/uv_envs` | `uvm config set envs-dir` |
+| 配置文件 | `~/.config/uvm/config` | — |
+| 元数据 | `~/.config/uvm/envs.d/*.env` | — |
+| uv 配置 | `~/.config/uv/uv.toml` | `XDG_CONFIG_HOME` |
 
-- `UVM_HOME`：默认 `~/.config/uvm`
-- `UVM_ENVS_DIR`：默认 `~/uv_envs`，可用 `uvm config set envs-dir <目录>` 修改
-- 配置文件：`~/.config/uvm/config`，内容是 `KEY="value"` 格式的普通文本，uvm 只解析、不执行
-- 元数据目录：`~/.config/uvm/envs.d`
-- 如果外部已经设置 `UVM_HOME`，安装器会沿用该值
+配置文件使用 `KEY="value"` 格式，uvm 只解析，不执行。
 
-### 元数据格式
+元数据是 `envs.d/` 下每个环境一个文件，通过 `mktemp` + `mv` 原子写入。旧版 `envs.json` 仅做一次性迁移，之后不再写入。
 
-当前版本会为每个环境写一个独立记录文件：
-
-```text
-~/.config/uvm/envs.d/
-  myenv.env
-  py311.env
-```
-
-这样做的好处：
-
-- 不再依赖手工拼接 JSON 字符串
-- 通过临时文件 + `mv` 实现更稳定的原子写入
-- 纯 Bash 下更容易做增删改查
-- 为并发写预留了锁目录
-
-旧版 `envs.json` 只用于一次性迁移，且仅在 record 文件尚不存在时才会参与。
-
-### shell 受管 block
-
-安装器与 `uvm repair` 会维护稳定的起止标记，例如：
+安装器在 shell RC 里写入稳定的受管块：
 
 ```bash
 # >>> uvm path >>>
@@ -397,18 +331,9 @@ eval "$(uvm shell-hook)"
 # <<< uvm shell <<<
 ```
 
-这种方式让重复安装、升级、修复、卸载都具备幂等性。
+这些标记让安装、修复、重装、卸载都是幂等的。
 
-### mirror 受管 block
-
-`uvm config mirror set <url>` 只更新 uv 用户级 `uv.toml` 中由 `uvm` 管理的 PyPI 包索引 block，路径与 uv 自身的读取位置一致：
-
-- Linux / macOS：`XDG_CONFIG_HOME` 为绝对路径时用 `$XDG_CONFIG_HOME/uv/uv.toml`，否则用 `~/.config/uv/uv.toml`
-- Windows Git Bash：`%APPDATA%\uv\uv.toml`
-
-`uvm doctor` 会显示实际路径。uvm 1.2.1 及更早版本写到 `~/.config/uv/uv.toml`、但 uv 实际不读取的受管 block，会被 `uvm doctor` 报告，并在下一次 `config mirror set` 或 `config mirror remove` 时清理。
-
-
+`uv.toml` 里的镜像块遵循同样的模式：
 
 ```toml
 # >>> uvm mirror >>>
@@ -418,133 +343,72 @@ default = true
 # <<< uvm mirror <<<
 ```
 
-`uvm config python-mirror set <url>` 会在同一个文件的最顶部写入自己的 block。原因是 `python-install-mirror` 是顶层配置项，必须写在所有 TOML 表之前：
+`uvm doctor` 会打印解析后的 `uv.toml` 路径。`UV_DEFAULT_INDEX` 和 `UV_PYTHON_INSTALL_MIRROR` 环境变量会覆盖受管块；`uvm config show` 在它们被设置时会给出提示。
 
-```toml
-# >>> uvm python-mirror >>>
-python-install-mirror = "https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone"
-# <<< uvm python-mirror <<<
-```
+---
 
-如果目标文件原本已经存在，`uvm` 会保留一次性备份 `uv.toml.backup`。
-已有非 `uvm` 管理的 `[[index]]` 时，`config mirror set` 不会写入；已有非 `uvm` 管理的 `python-install-mirror` 时，`config python-mirror set` 不会写入。两种情况都会保持原文件不变。两种镜像互相独立，不会由其中一个推断另一个。环境变量 `UV_DEFAULT_INDEX` / `UV_INDEX_URL` 和 `UV_PYTHON_INSTALL_MIRROR` 会覆盖这些配置，设置了的话 `uvm config show` 会提示。
+## 故障排查
 
-## 常见问题与排障
-
-### `uvm: command not found`
-
-先执行：
-
+**`uvm: command not found`**
 ```bash
-source ~/.bashrc   # 或 ~/.zshrc
+source ~/.zshrc    # 或 ~/.bashrc
 uvm doctor
 ```
+若 `PATH ~/.local/bin` 显示 MISSING，重新运行 `bash install.sh -y`。
 
-如果看到 `PATH ~/.local/bin : missing`，请补上：
-
+**`uvm activate` 提示需要 shell 集成**
 ```bash
-export PATH="${HOME}/.local/bin:$PATH"
+uvm repair && source ~/.zshrc
 ```
 
-或者重新执行：
-
+**`uvm list` 里缺少某个环境**
 ```bash
-bash install.sh -y
+uvm repair            # 清理无效记录并重新扫描
+uvm list --all        # 检查来源标签
 ```
 
-### `uvm activate` 提示必须在 shell integration 中运行
-
-执行：
-
+**自动激活不工作**
 ```bash
-uvm repair
-source ~/.bashrc   # 或 ~/.zshrc
-uvm doctor
-```
-
-### `uvm list` 没看到环境
-
-排查顺序：
-
-- 如果环境是用 `uvm create --path` 创建的，先确认实际路径仍然存在
-- 运行 `uvm repair`，清理失效记录并重新扫描默认目录
-- 运行 `uvm list --all`，查看条目的来源信息
-
-### 自动激活不工作
-
-检查项：
-
-- shell rc 中是否存在受管的 `uvm shell` block
-- 当前 shell 是否已经重新加载
-- `.venv` 是否为有效 `uv` 环境，且含有激活脚本
-- `.uvmrc` 中是否写的是合法环境名
-- `.uvmrc` 指向的共享环境是否仍存在
-
-建议先运行：
-
-```bash
-uvm doctor
+uvm doctor            # 检查 hook 状态和待处理 trust 警告
 uvm repair
 ```
 
-### 系统没有 `uv`
+**`uvm update` 后 shell 还显示旧版本**
+```bash
+exec "$SHELL"         # 重载 shell 以加载新 hook
+```
 
-`uvm` 本身不会内置 `uv`。
-
-- Linux / macOS 交互式安装时可选择安装
-- 非交互安装在缺少 `uv` 时会直接失败
-- Windows 用户应先在 PowerShell 中安装 `uv`
+---
 
 ## 卸载
 
 ```bash
 bash uninstall.sh
-bash uninstall.sh --force
-bash uninstall.sh --keep-shell-config
+bash uninstall.sh --force             # 跳过确认
+bash uninstall.sh --keep-shell-config # 保留 shell RC 里的块
 ```
 
-卸载会删除：
+会删除 `~/.local/bin/uvm`、`~/.local/lib/uvm`、`UVM_HOME` 和受管 shell 块。虚拟环境和 uv 本身保留不动。
 
-- `~/.local/bin/uvm`
-- `~/.local/lib/uvm`
-- 当前生效的 `UVM_HOME` 目录
-- shell 中由 `uvm` 写入的受管 block，除非使用 `--keep-shell-config`
-
-卸载会保留：
-
-- 你的虚拟环境目录
-- `uv`
-- uv 的 `uv.toml`
-
-如果你安装时使用了自定义 `UVM_HOME`，卸载时请带上同样的值：
-
+如果使用了自定义 `UVM_HOME`：
 ```bash
-UVM_HOME=/custom/uvm-home bash uninstall.sh --force
+UVM_HOME=/custom/path bash uninstall.sh --force
 ```
 
-详细说明见：[project_document/UNINSTALL.md](project_document/UNINSTALL.md)
+---
 
-## 平台支持范围
+## 平台支持
 
-- Linux：支持
-- macOS：支持
-- Windows Git Bash：支持
-- PowerShell / CMD：当前版本不支持
+| 平台 | 状态 |
+|------|------|
+| Linux | 支持 |
+| macOS | 支持 |
+| Windows Git Bash | 支持（先在 PowerShell 里安装 uv） |
+| PowerShell / CMD | 不支持 |
 
-## 当前验证覆盖
+---
 
-仓库当前已经覆盖：
+## 许可证
 
-- BATS 测试：元数据、环境名校验、受管 block、`doctor`、`repair`、`--path`、父级 `.uvmrc` 继承
-- CI：语法检查、BATS、Windows Git Bash smoke 测试
+MIT。详见 [LICENSE](LICENSE)。
 
-## 后续方向
-
-- 环境导出 / 导入
-- shell completion
-- 更丰富的环境说明信息
-- 在 Bash 核心稳定的前提下，为更多 shell 预留扩展空间
-
-## License
-
-MIT，详见 [LICENSE](LICENSE)。

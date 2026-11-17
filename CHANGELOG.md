@@ -7,6 +7,32 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.0] — 2026-11-17
+
+### Added
+- `uvm status` shows the active environment, envs-dir, and record count at a glance; `--json` flag for machine-readable output
+- `uvm rename` warns when `.uvmrc` files in the current directory tree still reference the old name after a rename
+- `uvm delete` now clears the trust entry for the deleted path so a future venv at the same location is not silently auto-activated
+- Hook version drift detection: after `uvm update`, the shell hook warns once per session if its embedded version does not match the installed binary, prompting a shell reload
+- `uvm update --check` now uses the GitHub releases API for the `latest` channel instead of downloading the full installer — much lighter and no temp file
+
+### Changed
+- `uvm_auto_activate` caches `$PWD` and re-detects only when the directory changes, eliminating redundant filesystem traversal on every prompt (significant on NFS or deep directory trees)
+- `uvm trust` invalidates the auto-activation cache immediately so a trust-then-activate flow in the same directory works without changing directories
+- `uvm list` does a two-pass scan to compute column width dynamically; long environment names no longer break column alignment
+- `uvm list`, `uvm doctor`, and `uvm status` output uses color and bold when stdout is a terminal; piped output is plain text
+- `uvm doctor` output is grouped into Installation, Configuration, Shell integration, and Metadata sections with `[OK]` / `[WARN]` prefixes
+- CI `consistency` job now extracts the version dynamically from `bin/uvm` instead of hardcoding it, so it stays correct across releases automatically
+- CI smoke matrix now includes `ubuntu-latest` alongside macOS and Windows Git Bash
+- README and README_CN fully rewritten: Why uvm → Quick start → Install → Common commands → Full reference → Auto-activation → Configuration → Troubleshooting → Uninstall
+- Non-interactive pipe installation (`curl … | bash -s -- -y`) is now documented and tested
+
+### Fixed
+- `uvm delete` no longer leaves a stale trust entry that would silently auto-activate a future venv at the same path
+- `uvm rename` no longer silently leaves `.uvmrc` references pointing at a name that no longer exists
+
+---
+
 ## [1.2.3] — 2026-10-08
 
 ### Added

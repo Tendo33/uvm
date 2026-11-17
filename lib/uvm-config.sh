@@ -1003,6 +1003,8 @@ uvm_trust_local_env() {
     fi
     uvm_release_metadata_lock
     [ "$status_code" -eq 0 ] || return "$status_code"
+    # Invalidate the auto-activation cache so the next prompt re-detects.
+    unset _UVM_LAST_PWD
     printf '%s\n' "$resolved_path"
 }
 

@@ -814,16 +814,26 @@ use_fake_installer() {
 UVM_INSTALL_VERSION="${version}"
 printf 'arg=%s\n' "\$@" > "\$UVM_UPDATE_MARKER"
 EOF
-    cat > "${fake_bin}/curl" <<'EOF'
+    # Fake curl handles two shapes:
+    #   curl -fsSL <url> -o <dest>   → copy fake installer (update/download path)
+    #   curl -fsSL <url>             → emit fake GitHub API JSON (--check path)
+    cat > "${fake_bin}/curl" <<EOF
 #!/bin/bash
-while [ "$#" -gt 0 ]; do
-    if [ "$1" = "-o" ]; then
-        cp "$UVM_FAKE_INSTALLER" "$2"
-        exit 0
+dest=""
+while [ "\$#" -gt 0 ]; do
+    if [ "\$1" = "-o" ]; then
+        dest="\$2"
+        shift 2
+    else
+        shift
     fi
-    shift
 done
-exit 1
+if [ -n "\$dest" ]; then
+    cp "\$UVM_FAKE_INSTALLER" "\$dest"
+else
+    printf '{"tag_name":"v${version}","name":"uvm v${version}"}\n'
+fi
+exit 0
 EOF
     chmod +x "${fake_bin}/curl"
     PATH="${fake_bin}:${PATH}"

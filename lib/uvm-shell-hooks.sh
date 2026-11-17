@@ -141,7 +141,28 @@ uvm_auto_activate() {
     local previous_status=$?
     local activate_script
 
-    uvm_detect_auto_activation_target
+    # Warn once per shell session when the loaded hook version doesn't match
+    # the installed binary (happens after `uvm update` before re-sourcing RC).
+    if [ -z "${_UVM_HOOK_DRIFT_WARNED:-}" ]; then
+        local binary_version
+        binary_version=$(command uvm version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -n 1)
+        if [ -n "${_UVM_HOOK_VERSION:-}" ] && [ -n "$binary_version" ] \
+            && [ "${_UVM_HOOK_VERSION}" != "$binary_version" ]; then
+            printf 'uvm: shell hook %s is out of sync with binary %s — run: source %s\n' \
+                "$_UVM_HOOK_VERSION" "$binary_version" "$(get_shell_rc_file 2>/dev/null || echo '~/.zshrc')" >&2
+        fi
+        _UVM_HOOK_DRIFT_WARNED=1
+        export _UVM_HOOK_DRIFT_WARNED
+    fi
+
+    # Re-detect only when the directory changed since the last run; auto-activation
+    # only depends on the current $PWD, so re-scanning on every prompt is wasted
+    # filesystem traversal that can stall the prompt on slow filesystems (NFS,
+    # remote mounts) or in deep trees.
+    if [ "${_UVM_LAST_PWD:-}" != "$PWD" ]; then
+        _UVM_LAST_PWD="$PWD"
+        uvm_detect_auto_activation_target
+    fi
 
     if [ -n "${UVM_AUTO_TARGET_PATH:-}" ]; then
         if [ "${VIRTUAL_ENV:-}" != "$UVM_AUTO_TARGET_PATH" ]; then
@@ -251,6 +272,7 @@ uvm_setup_prompt_hook() {
 uvm_generate_shell_hook() {
     cat <<EOF
 # UVM shell hook
+_UVM_HOOK_VERSION="$(command uvm version 2>/dev/null | grep -o '[0-9][^ ]*' | head -n 1)"
 $(declare -f uvm_get_home)
 $(declare -f uvm_get_config_file)
 $(declare -f uvm_read_config_value)

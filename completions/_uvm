@@ -33,6 +33,7 @@ _uvm() {
                 'init:Initialize uvm configuration'
                 'doctor:Diagnose shell integration and metadata health'
                 'repair:Rebuild metadata and shell hook'
+                'status:Show active environment and key config at a glance'
                 'config:Show or modify configuration'
                 'run:Run a command inside an environment without activating'
                 'rename:Rename an environment'

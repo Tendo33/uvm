@@ -4,6 +4,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/uvm-config.sh
 source "${SCRIPT_DIR}/uvm-config.sh"
 
+# Color output — only when stdout is a real terminal.
+if [ -t 1 ]; then
+    _UVM_RESET='\033[0m'
+    _UVM_BOLD='\033[1m'
+    _UVM_GREEN='\033[0;32m'
+    _UVM_YELLOW='\033[1;33m'
+    _UVM_BLUE='\033[0;34m'
+    _UVM_CYAN='\033[0;36m'
+    _UVM_DIM='\033[2m'
+else
+    _UVM_RESET=''
+    _UVM_BOLD=''
+    _UVM_GREEN=''
+    _UVM_YELLOW=''
+    _UVM_BLUE=''
+    _UVM_CYAN=''
+    _UVM_DIM=''
+fi
+
 uvm_cleanup_created_env() {
     local env_name="$1"
     local env_path="$2"
@@ -257,6 +276,19 @@ uvm_rename() {
 
     echo "Environment '${old_name}' renamed to '${new_name}'"
     echo "  Location unchanged: ${old_path}"
+
+    # Warn the user about any .uvmrc files that still reference the old name,
+    # since those will now silently fail to activate.
+    local uvmrc_hits
+    uvmrc_hits=$(grep -rIl --exclude-dir=.git --exclude-dir=node_modules \
+        -F "${old_name}" . 2>/dev/null | grep -F '.uvmrc' || true)
+    if [ -n "$uvmrc_hits" ]; then
+        echo ""
+        # shellcheck disable=SC2059
+        printf "${_UVM_YELLOW}Warning: .uvmrc files still reference '${old_name}':${_UVM_RESET}\n" >&2
+        printf '%s\n' "$uvmrc_hits" | sed 's/^/  /' >&2
+        echo "  Update them to '${new_name}' to keep auto-activation working." >&2
+    fi
     return 0
 }
 
@@ -573,6 +605,9 @@ uvm_delete() {
         return 1
     }
     remove_env_record "$env_name" || return 1
+    # Remove any trust entry for this path so a future venv at the same location
+    # is not silently auto-activated without explicit re-trust.
+    uvm_untrust_local_env "$env_path" 2>/dev/null || true
 
     echo "Environment '${env_name}' deleted successfully"
 }
@@ -623,10 +658,75 @@ uvm_self_update() {
     fi
 
     if [ "$check_only" = true ]; then
-        echo "Checking ${install_url}..."
-    else
-        echo "Updating uvm from ${install_url}..."
+        # For latest channel use the GitHub releases API — much lighter than
+        # downloading the full installer just to read one version string.
+        local downloaded_version
+        if [ "$channel" = "latest" ]; then
+            local api_url="https://api.github.com/repos/Tendo33/uvm/releases/latest"
+            local api_response
+            if command -v curl >/dev/null 2>&1; then
+                api_response=$(curl -fsSL "$api_url" 2>/dev/null) || {
+                    echo "Error: Failed to reach GitHub API"
+                    return 1
+                }
+            else
+                api_response=$(wget -qO- "$api_url" 2>/dev/null) || {
+                    echo "Error: Failed to reach GitHub API"
+                    return 1
+                }
+            fi
+            downloaded_version=$(printf '%s' "$api_response" \
+                | grep '"tag_name"' \
+                | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/')
+            if [ -z "$downloaded_version" ]; then
+                echo "Error: Could not parse version from GitHub API response"
+                return 1
+            fi
+        else
+            # Specific version target: download installer to confirm it exists.
+            local tmp_install
+            tmp_install=$(mktemp "${TMPDIR:-/tmp}/uvm-check.XXXXXX.sh") || return 1
+            local check_url="https://raw.githubusercontent.com/Tendo33/uvm/${channel}/install.sh"
+            if command -v curl >/dev/null 2>&1; then
+                curl -fsSL "$check_url" -o "$tmp_install" 2>/dev/null || {
+                    rm -f "$tmp_install"
+                    echo "Error: Version '${channel}' not found"
+                    return 1
+                }
+            else
+                wget -qO "$tmp_install" "$check_url" 2>/dev/null || {
+                    rm -f "$tmp_install"
+                    echo "Error: Version '${channel}' not found"
+                    return 1
+                }
+            fi
+            downloaded_version=$(sed -n 's/^UVM_INSTALL_VERSION="\([^"]*\)"/\1/p' "$tmp_install" | head -n 1)
+            rm -f "$tmp_install"
+            if [ -z "$downloaded_version" ]; then
+                echo "Error: Could not parse version from installer"
+                return 1
+            fi
+        fi
+
+        echo "Installed : ${current_version:-unknown}"
+        echo "Available : ${downloaded_version}"
+        if [ "$downloaded_version" = "$current_version" ]; then
+            echo "uvm is up to date"
+        elif [ -z "$current_version" ] || uvm_version_is_at_least "$downloaded_version" "$current_version"; then
+            echo "Update available. Run: uvm update"
+        else
+            echo "The available release is older than the installed version"
+        fi
+        return 0
     fi
+
+    if [ "$channel" = "latest" ]; then
+        install_url="https://github.com/Tendo33/uvm/releases/latest/download/install.sh"
+    else
+        install_url="https://raw.githubusercontent.com/Tendo33/uvm/${channel}/install.sh"
+    fi
+
+    echo "Updating uvm from ${install_url}..."
     local tmp_install
     tmp_install=$(mktemp "${TMPDIR:-/tmp}/uvm-update.XXXXXX.sh") || return 1
 
@@ -885,17 +985,32 @@ uvm_print_env_entry() {
     local env_path="$2"
     local python_version="$3"
     local source_label="$4"
+    # col_width is optional (5th arg); defaults to 20 for callers that don't pass it
+    local col_width="${5:-20}"
     local marker="  "
+    local name_fmt
+
+    name_fmt="%-${col_width}s"
 
     if [ "${VIRTUAL_ENV:-}" = "$env_path" ]; then
-        marker="* "
+        # Green bold name + arrow marker for active environment
+        # shellcheck disable=SC2059
+        printf "${_UVM_GREEN}${_UVM_BOLD}* ${name_fmt}${_UVM_RESET}" "$env_name"
+    else
+        # shellcheck disable=SC2059
+        printf "${_UVM_DIM}${marker}${_UVM_RESET}${name_fmt}" "$env_name"
     fi
 
+    # shellcheck disable=SC2059
+    printf "  ${_UVM_CYAN}Python %-9s${_UVM_RESET}" "${python_version:-unknown}"
+
     if [ "${UVM_LIST_SHOW_ALL:-false}" = true ]; then
-        printf "%s%-20s Python %-10s %-10s %s\n" "$marker" "$env_name" "${python_version:-unknown}" "$source_label" "$env_path"
-    else
-        printf "%s%-20s Python %-10s %s\n" "$marker" "$env_name" "${python_version:-unknown}" "$env_path"
+        # shellcheck disable=SC2059
+        printf "  ${_UVM_DIM}%-11s${_UVM_RESET}" "$source_label"
     fi
+
+    # shellcheck disable=SC2059
+    printf "  ${_UVM_DIM}%s${_UVM_RESET}\n" "$env_path"
 }
 
 uvm_list() {
@@ -904,6 +1019,13 @@ uvm_list() {
     local env_path
     local env_dir
     local json_mode=false
+    # Collect entries for two-pass column-width calculation
+    local -a _entry_names=()
+    local -a _entry_paths=()
+    local -a _entry_pythons=()
+    local -a _entry_sources=()
+    local col_width=0
+    local name_len
 
     UVM_LIST_SHOW_ALL=false
     while [ $# -gt 0 ]; do
@@ -930,12 +1052,13 @@ uvm_list() {
         return $?
     fi
 
-    echo "Available environments:"
-    echo ""
-
+    # --- Pass 1: collect all valid entries ---
     for env_name in $(uvm_list_record_names); do
         if uvm_load_env_record "$env_name" && uvm_is_valid_uv_env "$UVM_RECORD_PATH"; then
-            uvm_print_env_entry "$env_name" "$UVM_RECORD_PATH" "${UVM_RECORD_PYTHON}" "managed"
+            _entry_names+=("$env_name")
+            _entry_paths+=("$UVM_RECORD_PATH")
+            _entry_pythons+=("${UVM_RECORD_PYTHON:-unknown}")
+            _entry_sources+=("managed")
             seen_names="${seen_names}
 ${env_name}"
         fi
@@ -952,17 +1075,46 @@ ${env_name}"
                 continue
             fi
             if uvm_is_valid_uv_env "$env_dir"; then
-                uvm_print_env_entry "$env_name" "$env_dir" "$(get_env_python_version "$env_dir")" "discovered"
+                _entry_names+=("$env_name")
+                _entry_paths+=("$env_dir")
+                _entry_pythons+=("$(get_env_python_version "$env_dir")")
+                _entry_sources+=("discovered")
                 seen_names="${seen_names}
 ${env_name}"
             fi
         done
     fi
 
-    if [ -z "${seen_names#?}" ]; then
+    # --- Pass 2: compute column width from longest name ---
+    local i=0
+    while [ "$i" -lt "${#_entry_names[@]}" ]; do
+        name_len="${#_entry_names[$i]}"
+        [ "$name_len" -gt "$col_width" ] && col_width="$name_len"
+        i=$((i + 1))
+    done
+    # Minimum width of 16; add 2 for padding
+    [ "$col_width" -lt 16 ] && col_width=16
+    col_width=$((col_width + 2))
+
+    # --- Output ---
+    # shellcheck disable=SC2059
+    printf "${_UVM_BOLD}Available environments:${_UVM_RESET}\n\n"
+
+    if [ "${#_entry_names[@]}" -eq 0 ]; then
         echo "  No environments found"
         echo ""
         echo "Create one with: uvm create <env_name>"
+    else
+        i=0
+        while [ "$i" -lt "${#_entry_names[@]}" ]; do
+            uvm_print_env_entry \
+                "${_entry_names[$i]}" \
+                "${_entry_paths[$i]}" \
+                "${_entry_pythons[$i]}" \
+                "${_entry_sources[$i]}" \
+                "$col_width"
+            i=$((i + 1))
+        done
     fi
 
     echo ""
@@ -1061,68 +1213,93 @@ uvm_doctor() {
         mirror_status="configured"
     fi
 
-    echo "UVM doctor"
-    echo "----------"
-    echo "Platform          : $(uvm_detect_platform)"
-    echo "Shell             : $(detect_shell)"
-    echo "Shell RC          : ${shell_rc}"
+    local ok="${_UVM_GREEN}OK${_UVM_RESET}"
+    local warn="${_UVM_YELLOW}WARN${_UVM_RESET}"
+    local info="${_UVM_BLUE}--${_UVM_RESET}"
 
-    if [ "$hook_status" = "configured" ]; then
-        echo "Shell hook        : configured"
-    else
-        echo "Shell hook        : MISSING"
-        echo "  -> Fix: uvm repair && source ${shell_rc}"
-    fi
+    # shellcheck disable=SC2059
+    printf "\n${_UVM_BOLD}UVM doctor${_UVM_RESET}\n"
+    printf '%0.s─' {1..40}; echo
 
-    echo "UVM_HOME          : $(uvm_get_home)"
-    echo "UVM_ENVS_DIR      : $(uvm_get_default_envs_dir)"
-    echo "Metadata records  : $(uvm_count_metadata_records)"
-
+    # --- Installation ---
+    # shellcheck disable=SC2059
+    printf "\n${_UVM_BOLD}Installation${_UVM_RESET}\n"
+    printf "  Platform          : %s\n" "$(uvm_detect_platform)"
+    printf "  Shell             : %s\n" "$(detect_shell)"
     if [ "$path_status" = "present" ]; then
-        echo "PATH ~/.local/bin : present"
+        # shellcheck disable=SC2059
+        printf "  PATH ~/.local/bin : [${ok}] present\n"
     else
-        echo "PATH ~/.local/bin : MISSING"
-        echo "  -> Fix: add 'export PATH=\"\${HOME}/.local/bin:\$PATH\"' to ${shell_rc}"
-        echo "          or rerun: bash install.sh -y"
+        # shellcheck disable=SC2059
+        printf "  PATH ~/.local/bin : [${warn}] MISSING\n"
+        printf "    Fix: add 'export PATH=\"\${HOME}/.local/bin:\$PATH\"' to %s\n" "$shell_rc"
+        printf "         or rerun: bash install.sh -y\n"
     fi
-
     if [ "$uv_status" = "missing" ]; then
-        echo "UV                : NOT FOUND"
-        echo "  -> Fix: https://docs.astral.sh/uv/getting-started/installation/"
+        # shellcheck disable=SC2059
+        printf "  uv                : [${warn}] NOT FOUND\n"
+        printf "    Fix: https://docs.astral.sh/uv/getting-started/installation/\n"
     else
-        echo "UV                : ${uv_status}"
+        # shellcheck disable=SC2059
+        printf "  uv                : [${ok}] %s\n" "$uv_status"
     fi
 
-    echo "UV config file    : $(uvm_get_uv_config_file)"
+    # --- Configuration ---
+    # shellcheck disable=SC2059
+    printf "\n${_UVM_BOLD}Configuration${_UVM_RESET}\n"
+    printf "  UVM_HOME          : %s\n" "$(uvm_get_home)"
+    printf "  envs dir          : %s\n" "$(uvm_get_default_envs_dir)"
+    printf "  UV config file    : %s\n" "$(uvm_get_uv_config_file)"
     if [ "$mirror_status" = "configured" ]; then
-        echo "Mirror block      : configured"
+        # shellcheck disable=SC2059
+        printf "  Mirror block      : [${ok}] configured\n"
     else
-        echo "Mirror block      : not configured (optional)"
-        echo "  -> To add: uvm config mirror set <url>"
+        # shellcheck disable=SC2059
+        printf "  Mirror block      : [${info}] not configured (optional)\n"
+        printf "    To add: uvm config mirror set <url>\n"
     fi
     if stale_mirror_file=$(uvm_get_stale_mirror_config_file); then
-        echo "Stale mirror block: ${stale_mirror_file} (ignored by uv)"
-        echo "  -> Fix: uvm config mirror set <url>  (or: uvm config mirror remove)"
+        # shellcheck disable=SC2059
+        printf "  Stale mirror      : [${warn}] %s (ignored by uv)\n" "$stale_mirror_file"
+        printf "    Fix: uvm config mirror set <url>  (or: uvm config mirror remove)\n"
     fi
 
+    # --- Shell integration ---
+    # shellcheck disable=SC2059
+    printf "\n${_UVM_BOLD}Shell integration${_UVM_RESET}\n"
+    printf "  Shell RC          : %s\n" "$shell_rc"
+    if [ "$hook_status" = "configured" ]; then
+        # shellcheck disable=SC2059
+        printf "  Shell hook        : [${ok}] configured\n"
+    else
+        # shellcheck disable=SC2059
+        printf "  Shell hook        : [${warn}] MISSING\n"
+        printf "    Fix: uvm repair && source %s\n" "$shell_rc"
+    fi
     if [ -n "${VIRTUAL_ENV:-}" ]; then
-        echo "Active environment: ${VIRTUAL_ENV}"
+        # shellcheck disable=SC2059
+        printf "  Active env        : ${_UVM_GREEN}%s${_UVM_RESET}\n" "$VIRTUAL_ENV"
     else
-        echo "Active environment: none"
+        printf "  Active env        : none\n"
     fi
-
     if [ -n "${UVM_AUTO_ACTIVATED:-}" ]; then
-        echo "Auto activated    : ${UVM_AUTO_ACTIVATED} (from ${UVM_AUTO_PROJECT_ROOT:-unknown})"
+        printf "  Auto activated    : %s (from %s)\n" "$UVM_AUTO_ACTIVATED" "${UVM_AUTO_PROJECT_ROOT:-unknown}"
     else
-        echo "Auto activated    : no"
+        printf "  Auto activated    : no\n"
+    fi
+    if [ -n "${UVM_UNTRUSTED_LOCAL_ENV:-}" ]; then
+        # shellcheck disable=SC2059
+        printf "  Local .venv trust : [${warn}] REQUIRED (%s)\n" "$UVM_UNTRUSTED_LOCAL_ENV"
+        printf "    Fix: review first, then run: uvm trust '%s'\n" "$UVM_UNTRUSTED_LOCAL_ENV"
+    else
+        printf "  Local .venv trust : no pending environment\n"
     fi
 
-    if [ -n "${UVM_UNTRUSTED_LOCAL_ENV:-}" ]; then
-        echo "Local .venv trust : REQUIRED (${UVM_UNTRUSTED_LOCAL_ENV})"
-        echo "  -> Review first, then run: uvm trust '${UVM_UNTRUSTED_LOCAL_ENV}'"
-    else
-        echo "Local .venv trust : no pending environment"
-    fi
+    # --- Metadata ---
+    # shellcheck disable=SC2059
+    printf "\n${_UVM_BOLD}Metadata${_UVM_RESET}\n"
+    printf "  Records           : %s\n" "$(uvm_count_metadata_records)"
+    echo
 }
 
 uvm_repair() {
@@ -1149,6 +1326,60 @@ uvm_repair() {
     echo "  Shell hook file : ${shell_rc}"
     echo "  Managed records : $(uvm_count_metadata_records)"
     echo "  Re-registered   : ${registered_count}"
+}
+
+uvm_status() {
+    local json_mode=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) json_mode=true; shift ;;
+            *)
+                echo "Error: Unknown option: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    init_uvm_config || return 1
+
+    if [ "$json_mode" = true ]; then
+        local active_env="${UVM_ACTIVE_ENV:-${UVM_AUTO_ACTIVATED:-}}"
+        local active_path="${VIRTUAL_ENV:-}"
+        printf '{"active_env":%s,"active_path":%s,"envs_dir":"%s","records":%s}\n' \
+            "$([ -n "$active_env" ] && printf '"%s"' "$(uvm_json_escape "$active_env")" || printf 'null')" \
+            "$([ -n "$active_path" ] && printf '"%s"' "$(uvm_json_escape "$active_path")" || printf 'null')" \
+            "$(uvm_json_escape "$(uvm_get_default_envs_dir)")" \
+            "$(uvm_count_metadata_records)"
+        return 0
+    fi
+
+    # shellcheck disable=SC2059
+    printf "${_UVM_BOLD}uvm status${_UVM_RESET}\n\n"
+
+    if [ -n "${VIRTUAL_ENV:-}" ]; then
+        local active_name="${UVM_ACTIVE_ENV:-${UVM_AUTO_ACTIVATED:-}}"
+        if [ -n "$active_name" ]; then
+            # shellcheck disable=SC2059
+            printf "  Active env  : ${_UVM_GREEN}${_UVM_BOLD}%s${_UVM_RESET}${_UVM_DIM} (%s)${_UVM_RESET}\n" \
+                "$active_name" "$VIRTUAL_ENV"
+        else
+            # shellcheck disable=SC2059
+            printf "  Active env  : ${_UVM_GREEN}%s${_UVM_RESET}\n" "$VIRTUAL_ENV"
+        fi
+        if [ -n "${UVM_AUTO_ACTIVATED:-}" ]; then
+            # shellcheck disable=SC2059
+            printf "  Source      : ${_UVM_DIM}auto (%s)${_UVM_RESET}\n" "${UVM_AUTO_PROJECT_ROOT:-unknown}"
+        fi
+    else
+        # shellcheck disable=SC2059
+        printf "  Active env  : ${_UVM_DIM}none${_UVM_RESET}\n"
+    fi
+
+    # shellcheck disable=SC2059
+    printf "  Envs dir    : ${_UVM_DIM}%s${_UVM_RESET}\n" "$(uvm_get_default_envs_dir)"
+    # shellcheck disable=SC2059
+    printf "  Records     : ${_UVM_DIM}%s environment(s)${_UVM_RESET}\n" "$(uvm_count_metadata_records)"
+    echo
 }
 
 uvm_help() {
@@ -1184,6 +1415,7 @@ COMMANDS:
     scan [directory]           Scan a directory and register valid environments
     repair                     Rebuild metadata and shell hook
     doctor                     Diagnose shell integration and metadata health
+    status                     Show the active environment and key config at a glance
     update [v<version>]        Update uvm to the latest (or given) release
         --check                Only report whether an update is available
     trust [path]               Trust a local .venv for auto-activation

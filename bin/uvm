@@ -13,7 +13,7 @@ source "${LIB_DIR}/uvm-core.sh" || { echo "Error: Failed to load uvm-core.sh fro
 # shellcheck source=lib/uvm-shell-hooks.sh
 source "${LIB_DIR}/uvm-shell-hooks.sh" || { echo "Error: Failed to load uvm-shell-hooks.sh from ${LIB_DIR}" >&2; exit 1; }
 
-UVM_VERSION="1.3.1"
+UVM_VERSION="1.3.2"
 
 show_version() {
     echo "uvm version ${UVM_VERSION}"
@@ -119,7 +119,7 @@ main() {
             uvm_repair
             ;;
         status)
-            uvm_status
+            uvm_status "$@"
             ;;
         config)
             uvm_config_command "$@"

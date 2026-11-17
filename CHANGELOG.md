@@ -7,6 +7,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.2] — 2026-11-17
+
+### Fixed
+- ShellCheck SC2119: `uvm_status` in dispatcher now passes `"$@"`
+- ShellCheck SC2088: tilde in quoted string replaced with `$HOME` in hook drift warning
+- BATS test for `uvm_doctor` updated to match new grouped output (`Records` instead of `Metadata records`)
+
+---
+
 ## [1.3.1] — 2026-11-17
 
 ### Changed

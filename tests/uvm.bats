@@ -355,7 +355,7 @@ EOF
 
     [ "$status" -eq 0 ]
     [[ "$output" == *"UVM doctor"* ]]
-    [[ "$output" == *"Metadata records"* ]]
+    [[ "$output" == *"Records"* ]]
     [[ "$output" == *"${UVM_HOME}"* ]]
 }
 

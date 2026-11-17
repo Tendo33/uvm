@@ -149,7 +149,7 @@ uvm_auto_activate() {
         if [ -n "${_UVM_HOOK_VERSION:-}" ] && [ -n "$binary_version" ] \
             && [ "${_UVM_HOOK_VERSION}" != "$binary_version" ]; then
             printf 'uvm: shell hook %s is out of sync with binary %s — run: source %s\n' \
-                "$_UVM_HOOK_VERSION" "$binary_version" "$(get_shell_rc_file 2>/dev/null || echo '~/.zshrc')" >&2
+                "$_UVM_HOOK_VERSION" "$binary_version" "$(get_shell_rc_file 2>/dev/null || echo "$HOME/.zshrc")" >&2
         fi
         _UVM_HOOK_DRIFT_WARNED=1
         export _UVM_HOOK_DRIFT_WARNED

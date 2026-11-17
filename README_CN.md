@@ -1,4 +1,4 @@
-# uvm — UV 环境管理器（1.3.1）
+# uvm — UV 环境管理器（1.3.2）
 
 <div align="center">
 

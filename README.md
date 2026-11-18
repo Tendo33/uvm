@@ -1,4 +1,4 @@
-# uvm — UV Environment Manager (1.3.3)
+# uvm — UV Environment Manager (1.3.4)
 
 <div align="center">
 

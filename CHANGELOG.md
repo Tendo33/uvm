@@ -7,6 +7,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.4] — 2026-11-18
+
+### Changed
+- The auto-activation hook walks the directory tree once instead of twice. Finding a `.venv` and a `.uvmrc` used to be two separate upward walks; `uvm_find_upward_targets` reports both from a single pass.
+- Parent directories are computed with parameter expansion (`uvm_parent_dir`) instead of forking `dirname` for every level. The hook runs on every `cd`, so the forks dominated its cost: 17.9 ms → 4.7 ms per call on a project four levels deep.
+
+### Fixed
+- `uvm_generate_shell_hook` now exports `uvm_parent_dir` and `uvm_find_upward_targets`. Without them the generated hook called an undefined function and `.uvmrc` auto-activation silently stopped working in the user's shell.
+
+### Added
+- Tests that load the generated hook text in a clean shell: one checks every function the hook calls is defined by it, the other checks `.uvmrc` auto-activation resolves end to end. The existing suite sourced the library directly, so it could not see a missing export.
+
+---
+
 ## [1.3.3] — 2026-11-17
 
 ### Fixed

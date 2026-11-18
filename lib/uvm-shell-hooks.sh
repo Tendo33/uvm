@@ -60,17 +60,34 @@ _uvm_hook_get_env_path() {
     return 1
 }
 
+# Parent directory without forking `dirname`. Runs in the caller's shell on a
+# real string, so it beats a command substitution even for one level.
+uvm_parent_dir() {
+    local path="$1"
+
+    while [ "${path%/}" != "$path" ]; do
+        path="${path%/}"
+    done
+    case "$path" in
+        */*) printf '%s' "${path%/*}" ;;
+        *) printf '%s' "" ;;
+    esac
+}
+
 uvm_find_upward_file() {
     local file_name="$1"
-    local current_dir="$PWD"
+    local current_dir="${2:-$PWD}"
     local depth=0
+    local parent
 
     while [ -n "$current_dir" ] && [ "$current_dir" != "/" ] && [ "$depth" -lt 25 ]; do
         if [ -f "${current_dir}/${file_name}" ]; then
             printf '%s/%s\n' "$current_dir" "$file_name"
             return 0
         fi
-        current_dir=$(dirname "$current_dir")
+        parent=$(uvm_parent_dir "$current_dir")
+        [ "$parent" = "$current_dir" ] && break
+        current_dir="$parent"
         depth=$((depth + 1))
     done
 
@@ -78,9 +95,10 @@ uvm_find_upward_file() {
 }
 
 uvm_find_upward_local_env() {
-    local current_dir="$PWD"
+    local current_dir="${1:-$PWD}"
     local depth=0
     local local_env
+    local parent
 
     while [ -n "$current_dir" ] && [ "$current_dir" != "/" ] && [ "$depth" -lt 25 ]; do
         local_env="${current_dir}/.venv"
@@ -88,11 +106,50 @@ uvm_find_upward_local_env() {
             echo "$local_env"
             return 0
         fi
-        current_dir=$(dirname "$current_dir")
+        parent=$(uvm_parent_dir "$current_dir")
+        [ "$parent" = "$current_dir" ] && break
+        current_dir="$parent"
         depth=$((depth + 1))
     done
 
     return 1
+}
+
+# One upward walk that reports both matches, because the auto-activation hook
+# needs both on every `cd` and two separate walks cost twice the stat calls.
+# Sets UVM_UPWARD_LOCAL_ENV and UVM_UPWARD_FILE (empty when not found).
+uvm_find_upward_targets() {
+    local file_name="$1"
+    local current_dir="${2:-$PWD}"
+    local depth=0
+    local local_env
+    local parent
+    local found_file=""
+
+    UVM_UPWARD_LOCAL_ENV=""
+    UVM_UPWARD_FILE=""
+    while [ -n "$current_dir" ] && [ "$current_dir" != "/" ] && [ "$depth" -lt 25 ]; do
+        if [ -z "$UVM_UPWARD_LOCAL_ENV" ]; then
+            local_env="${current_dir}/.venv"
+            if uvm_is_valid_uv_env "$local_env"; then
+                UVM_UPWARD_LOCAL_ENV="$local_env"
+            fi
+        fi
+        if [ -z "$found_file" ] && [ -f "${current_dir}/${file_name}" ]; then
+            found_file="${current_dir}/${file_name}"
+        fi
+        # Both answers found, or reached the top: nothing left to look at.
+        if [ -n "$UVM_UPWARD_LOCAL_ENV" ] && [ -n "$found_file" ]; then
+            break
+        fi
+        parent=$(uvm_parent_dir "$current_dir")
+        [ "$parent" = "$current_dir" ] && break
+        current_dir="$parent"
+        depth=$((depth + 1))
+    done
+
+    UVM_UPWARD_FILE="$found_file"
+    [ -n "$UVM_UPWARD_LOCAL_ENV" ] || [ -n "$UVM_UPWARD_FILE" ]
 }
 
 uvm_detect_auto_activation_target() {
@@ -104,12 +161,15 @@ uvm_detect_auto_activation_target() {
     unset UVM_AUTO_TARGET_PATH UVM_AUTO_TARGET_SOURCE UVM_AUTO_TARGET_ROOT UVM_UNTRUSTED_LOCAL_ENV
     uvm_shell_load_runtime_config
 
-    local_env=$(uvm_find_upward_local_env || true)
+    if uvm_find_upward_targets ".uvmrc"; then
+        local_env="$UVM_UPWARD_LOCAL_ENV"
+        uvmrc_file="$UVM_UPWARD_FILE"
+    fi
     if [ -n "$local_env" ]; then
         if uvm_is_local_env_trusted "$local_env"; then
             UVM_AUTO_TARGET_PATH="$local_env"
             UVM_AUTO_TARGET_SOURCE="local"
-            UVM_AUTO_TARGET_ROOT="$(dirname "$UVM_AUTO_TARGET_PATH")"
+            UVM_AUTO_TARGET_ROOT="$(uvm_parent_dir "$UVM_AUTO_TARGET_PATH")"
             export UVM_AUTO_TARGET_PATH UVM_AUTO_TARGET_SOURCE UVM_AUTO_TARGET_ROOT
             return 0
         fi
@@ -117,7 +177,6 @@ uvm_detect_auto_activation_target() {
         export UVM_UNTRUSTED_LOCAL_ENV
     fi
 
-    uvmrc_file=$(uvm_find_upward_file ".uvmrc" || true)
     if [ -n "$uvmrc_file" ]; then
         env_name=$(head -n 1 "$uvmrc_file" | tr -d '[:space:]')
         if ! uvm_is_valid_env_name "$env_name"; then
@@ -288,8 +347,10 @@ $(declare -f uvm_is_local_env_trusted)
 $(declare -f uvm_shell_load_runtime_config)
 $(declare -f _uvm_hook_record_file_path)
 $(declare -f _uvm_hook_get_env_path)
+$(declare -f uvm_parent_dir)
 $(declare -f uvm_find_upward_file)
 $(declare -f uvm_find_upward_local_env)
+$(declare -f uvm_find_upward_targets)
 $(declare -f uvm_detect_auto_activation_target)
 $(declare -f uvm_auto_activate)
 $(declare -f uvm_shell_activate)

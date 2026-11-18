@@ -1039,3 +1039,45 @@ EOF
 
     [ "$UVM_SETUP_ENVS_DIR" = "${TEST_HOME}/configured" ]
 }
+
+@test "generated shell hook defines every function it calls" {
+    # The hook is emitted as an explicit list of `declare -f` exports, so a
+    # function used by the hook but missing from that list only fails in the
+    # user's shell. Load the generated text in a clean bash and check that the
+    # auto-activation path resolves its helpers.
+    local hook_file="${TEST_HOME}/hook.sh"
+
+    uvm_generate_shell_hook > "$hook_file"
+
+    # Every uvm_* function referenced inside the hook body must be defined by it.
+    local missing
+    missing=$(bash -c '
+        source "$1" >/dev/null 2>&1
+        for fn in $(grep -oE "\b(uvm_[a-z_]+|_[a-z_]*uvm[a-z_]*)\b" "$1" | sort -u); do
+            declare -f "$fn" >/dev/null 2>&1 || echo "$fn"
+        done
+    ' bash "$hook_file")
+
+    [ -z "$missing" ]
+}
+
+@test "generated shell hook auto-activates from a .uvmrc in a clean shell" {
+    local hook_file="${TEST_HOME}/hook.sh"
+    local project_dir="${TEST_HOME}/project"
+    local output
+
+    make_fake_env "${UVM_ENVS_DIR}/hookenv"
+    add_env_record "hookenv" "${UVM_ENVS_DIR}/hookenv" "3.12.1"
+    mkdir -p "$project_dir"
+    printf 'hookenv\n' > "${project_dir}/.uvmrc"
+
+    uvm_generate_shell_hook > "$hook_file"
+
+    output=$(cd "$project_dir" && HOME="$TEST_HOME" bash -c '
+        source "$1"
+        uvm_detect_auto_activation_target
+        printf "%s|%s" "${UVM_AUTO_TARGET_PATH:-}" "${UVM_AUTO_TARGET_SOURCE:-}"
+    ' bash "$hook_file" 2>&1)
+
+    [[ "$output" == *"/hookenv|uvm:hookenv"* ]]
+}

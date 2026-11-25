@@ -310,6 +310,10 @@ uvm config python-mirror remove
 
 `config mirror` manages the PyPI index `uv pip install` uses and `config python-mirror` the URL uv downloads interpreters from; both are written to uv's user-level `uv.toml`. If an unmanaged setting of the same kind already exists there, uvm leaves it alone.
 
+## More examples
+
+Longer walkthroughs of switching between environments, mirror setup and CI use live in [docs/EXAMPLES.md](docs/EXAMPLES.md).
+
 ## Auto-Activation
 
 Add this to your shell RC (the installer does it for you):

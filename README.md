@@ -310,6 +310,10 @@ uvm config python-mirror remove
 
 `config mirror` 管 `uv pip install` 用的 PyPI 索引，`config python-mirror` 管 uv 下载解释器用的地址，两者都写进 uv 用户级的 `uv.toml`。如果文件里已经有同类但不受管理的设置，uvm 不会改动它。
 
+## 更多示例
+
+完整的多环境切换、镜像配置和 CI 用法见 [docs/EXAMPLES.md](docs/EXAMPLES.md)。
+
 ## 自动激活
 
 在 shell RC 里加上（安装脚本会自动做）：

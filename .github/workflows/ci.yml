@@ -164,9 +164,9 @@ jobs:
           test "$BIN_VERSION" = "$INSTALL_VERSION"
           grep -q "^## \[${BIN_VERSION}\]" CHANGELOG.md
           grep -q "${BIN_VERSION}" README.md
-          grep -q "${BIN_VERSION}" README_CN.md
+          grep -q "${BIN_VERSION}" README_en.md
           if grep -R -n '\[python-downloads\]' \
-              README.md README_CN.md EXAMPLES.md project_document lib; then
+              README.md README_en.md EXAMPLES.md project_document lib; then
             echo "Retired invalid [python-downloads] table is still documented or emitted"
             exit 1
           fi

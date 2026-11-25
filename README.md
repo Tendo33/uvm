@@ -18,7 +18,7 @@
 
 <sub>中文 · [English](README_en.md)</sub>
 
-<img src="docs/images/environments.webp" alt="多个命名环境排成树状，其中一条路径受信任并接入终端" width="760">
+<img src="docs/screenshots/environments.webp" alt="多个命名环境排成树状，其中一条路径受信任并接入终端" width="760">
 
 </div>
 

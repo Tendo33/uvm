@@ -18,7 +18,7 @@
 
 <sub>[中文](README.md) · English</sub>
 
-<img src="docs/images/environments.webp" alt="Named environments arranged in a tree, with one trusted path connected to a terminal" width="760">
+<img src="docs/screenshots/environments.webp" alt="Named environments arranged in a tree, with one trusted path connected to a terminal" width="760">
 
 </div>
 

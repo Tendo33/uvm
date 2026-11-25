@@ -452,4 +452,4 @@ done
 
 ---
 
-更多信息请参阅 [README.md](README.md)。
+更多信息请参阅 [README.md](../README.md)。
